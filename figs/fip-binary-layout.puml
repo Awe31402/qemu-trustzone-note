@@ -1,0 +1,56 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam dpi 150
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+skinparam ArrowColor #1E293B
+skinparam ArrowFontColor #0F172A
+skinparam ArrowFontSize 11
+
+title flash.bin 與 FIP（Firmware Image Package）二進位結構（QEMU ARMv8 / TF-A v2.10.4）
+
+package "flash.bin（2.1 MB，QEMU -bios 載入至 0x0000_0000）" #F8FAFC {
+  rectangle "0x00000 ~ 0x1FFFF\nbl1.bin（Boot ROM）\n負責開箱讀取 FIP，本身不在 FIP 內" as BL1 #DBEAFE
+  rectangle "0x20000 ~ 0x3FFFF\n空白填充（dd seek=64 bs=4096）" as PAD #F1F5F9
+  rectangle "0x40000 起：fip.bin（約 1.9 MB）\nPLAT_QEMU_FIP_BASE = 0x00040000" as FIP_BOX #FEF9C3
+}
+
+package "fip.bin 內部結構（include/tools_share/firmware_image_package.h）" #FFFBEB {
+  rectangle TOC_HDR #FDE68A [
+    <b>ToC Header（16 bytes，偏移 0x000）</b>
+    |= 欄位 |= 大小 |= 本環境值 / 說明 |
+    | name | 4 B | 0xAA640001 (TOC_HEADER_NAME) |
+    | serial_number | 4 B | 非 0 序號（is_valid_header 檢查） |
+    | flags | 8 B | 平台／保留旗標 |
+  ]
+
+  rectangle TOC_ENT #FED7AA [
+    <b>ToC Entry 目錄表（每筆 40 bytes，13 筆 + 結尾全 0 UUID 哨兵）</b>
+    |= 欄位 |= 大小 |= 說明 |
+    | uuid | 16 B | 成員唯一識別碼（對應 Image ID） |
+    | offset_address | 8 B | 相對 fip.bin 開頭的位元組偏移 |
+    | size | 8 B | 成員二進位大小（bytes） |
+    | flags | 8 B | 屬性旗標 |
+  ]
+
+  rectangle PAYLOAD #DCFCE7 [
+    <b>Payload 區（從 fip.bin 偏移 0x268 開始，共 13 個成員）</b>
+    |= 偏移（fip.bin） |= 大小 |= 成員說明 |
+    | 0x000268 | 0x125D1 | BL2（Trusted Boot Firmware） |
+    | 0x012839 | 0x0D06C | BL31（EL3 Runtime Firmware） |
+    | 0x01F8A5 | 0x0001C | BL32（OP-TEE 28-byte Header） |
+    | 0x01F8C1 | 0xB0348 | BL32 Extra1（OP-TEE 本體） |
+    | 0x0CFC09 | 0xFFDD8 | BL33（U-Boot 2024.01） |
+    | 0x1CF9E1 ~ 0x1D20CF | 8 張憑證 | TBBR X.509 DER 憑證（Key + Content） |
+  ]
+}
+
+BL1 -[hidden]down-> PAD
+PAD -[hidden]down-> FIP_BOX
+FIP_BOX -right-> TOC_HDR : "展開檢視"
+TOC_HDR -down-> TOC_ENT : "緊接於後"
+TOC_ENT -down-> PAYLOAD : "offset_address 指向"
+
+@enduml
