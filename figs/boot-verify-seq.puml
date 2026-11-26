@@ -1,0 +1,59 @@
+@startuml
+skinparam dpi 150
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+
+title qemuarm64-secureboot 開機與 TBBR 驗簽時序
+
+participant "QEMU\n(virt,secure=on)" as QEMU #F5F7FA
+participant "TF-A BL1\n(EL3 / ROM)" as BL1 #FCF3CF
+participant "TF-A BL2\n(Trusted Boot)" as BL2 #F1948A
+participant "TF-A BL31\n(EL3 Monitor)" as BL31 #FCF3CF
+participant "OP-TEE OS\n(S-EL1 / BL32)" as OPTEE #F5B7B1
+participant "U-Boot\n(NS-EL2 / BL33)" as UBOOT #85C1E9
+participant "Linux + xtest\n(NS-EL1/0)" as LINUX #AED6F1
+
+QEMU -> BL1 : 上電 Reset，執行 flash.bin @ 0x0
+activate BL1
+BL1 -> BL1 : 讀取 FIP 內 TB_FW_CERT\n以內嵌 ROTPK Hash + mbedTLS 驗簽
+BL1 -> BL1 : 驗證 BL2 映像 Hash
+BL1 -> BL2 : 驗簽通過，跳轉至 BL2
+deactivate BL1
+activate BL2
+
+BL2 -> BL2 : 驗證 Trusted Key Cert\n(Root Key → Trusted World Key)
+BL2 -> BL2 : 驗證並載入 BL31 (SOC_FW)
+BL2 -> BL2 : 驗證並載入 BL32 (TOS_FW: OP-TEE)
+BL2 -> BL2 : 驗證並載入 BL33 (NT_FW: U-Boot)
+note right of BL2
+  任一憑證或映像被竄改
+  → mbedTLS 驗簽失敗
+  → 直接 Panic 停機
+end note
+
+BL2 -> BL31 : 透過 SMC 交棒給 BL31 (EL3)
+deactivate BL2
+activate BL31
+
+BL31 -> OPTEE : 初始化 SPD=opteed，進入 BL32
+activate OPTEE
+OPTEE -> OPTEE : 初始化安全記憶體與驅動\n載入 optee-ftpm Early TA
+OPTEE --> BL31 : 初始化完成 (TEESMC_OPTEED_RETURN_ENTRY_DONE)
+deactivate OPTEE
+
+BL31 -> UBOOT : 切換至 Non-Secure EL2，跳轉 BL33
+activate UBOOT
+UBOOT -> LINUX : 從 wic.qcow2 載入並啟動 Linux Kernel
+deactivate UBOOT
+activate LINUX
+
+LINUX -> BL31 : SMC 呼叫 (optee driver / xtest)
+BL31 -> OPTEE : 路由至 Secure World 執行 TA
+activate OPTEE
+OPTEE --> BL31 : 回傳結果
+deactivate OPTEE
+BL31 --> LINUX : 返回 Normal World
+
+@enduml

@@ -1,0 +1,40 @@
+@startuml
+skinparam dpi 150
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+
+title QEMU ARMv8 + TF-A + OP-TEE 安全開機環境分層架構
+
+package "Host 模擬層：QEMU (qemu-system-aarch64)\n-machine virt,secure=on -no-acpi -m 1024 -bios flash.bin" #F5F7FA {
+
+  package "Secure World (TrustZone)" #FDEDEC {
+    rectangle "S-EL0：Trusted Applications (TAs)\n• optee-ftpm (Early TA, TPM 2.0)\n• optee-test / optee-examples TAs" as sel0 #FADBD8
+    rectangle "S-EL1：OP-TEE OS 4.1.0 (BL32)\n• tee-header / tee-pager / tee-pageable\n• TA 簽章驗證與安全服務" as sel1 #F5B7B1
+    rectangle "S-EL1 (開機期)：TF-A BL2\n• 讀取 FIP (offset 0x40000)\n• mbedTLS 驗證 BL31 / BL32 / BL33 憑證" as bl2 #F1948A
+  }
+
+  package "Non-Secure World (Normal World)" #EBF5FB {
+    rectangle "NS-EL0：Linux User Space\n• tee-supplicant (RPMB / FS 代理)\n• xtest / optee-examples\n• /dev/tee0, /dev/tpm0" as nsel0 #D6EAF8
+    rectangle "NS-EL1：Linux Kernel (linux-yocto)\n• OP-TEE Driver (SMC 通訊)\n• TPM fTPM Driver" as nsel1 #AED6F1
+    rectangle "NS-EL2：U-Boot (BL33)\n• CONFIG_TFABOOT=y (Text Base: 0x60000000)\n• 載入 wic.qcow2 內的 Kernel" as nsel2 #85C1E9
+  }
+
+  rectangle "EL3：TF-A BL1 (模擬 BootROM, offset 0x0)  →  TF-A BL31 (Runtime Monitor, SPD=opteed)\n• BL1 內嵌 ROTPK Hash，驗簽 BL2 後交棒\n• BL31 負責開機後的 SMC 世界切換與 PSCI" as el3 #FCF3CF
+}
+
+nsel0 -down-> nsel1 : ioctl / syscall
+nsel2 -up-> nsel1 : 啟動 Kernel
+nsel1 -down-> el3 : SMC (Normal ↔ Secure)
+
+sel1 -up-> sel0 : 載入並驗簽 TA
+bl2 -up-> sel1 : ③ 驗證並載入 BL32
+bl2 -right-> nsel2 : ④ 驗證並載入 BL33 (U-Boot)
+
+el3 -up-> bl2 : ① BL1 驗證 BL2
+bl2 -down-> el3 : ② 驗證並載入 BL31
+el3 -up-> sel1 : 路由至 OP-TEE (opteed)
+
+@enduml

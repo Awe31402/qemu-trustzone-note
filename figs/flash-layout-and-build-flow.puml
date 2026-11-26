@@ -1,0 +1,43 @@
+@startuml
+skinparam dpi 150
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+
+title Yocto (meta-arm + kas) 建置管線與 flash.bin 打包結構
+
+package "kas 設定檔組合 (kas/)" #F4ECF7 {
+  rectangle "kas/base.yml\n• poky + meta-arm + meta-oe\n• MACHINE=qemuarm64-secureboot\n• DL_DIR / SSTATE_DIR 快取\n• optee-client/test/examples" as kbase #E8DAEF
+  rectangle "kas/tbbr.yml\n• TFA_MBEDTLS=1\n• TRUSTED_BOARD_BOOT=1\n• GENERATE_COT=1\n• ARM_ROTPK_LOCATION=devel_rsa" as ktbbr #D2B4DE
+  rectangle "kas/debug.yml\n• CFG_TEE_CORE_LOG_LEVEL=3" as kdbg #EBDEF0
+}
+
+package "BitBake 編譯核心元件 (scarthgap LTS)" #EBF5FB {
+  rectangle "optee-ftpm\n(Early TA)" as ftpm #D6EAF8
+  rectangle "optee-os 4.1.0\n(BL32: tee-*_v2.bin + tee.elf)" as optee #AED6F1
+  rectangle "u-boot\n(BL33: u-boot.bin)" as uboot #AED6F1
+  rectangle "trusted-firmware-a 2.10.4\n+ mbedTLS 3.4.1\n• cert_create 產生 X.509 憑證\n• fiptool 封裝 fip.bin" as tfa #FADBD8
+  rectangle "linux-yocto + rootfs\n(core-image-base)" as linux #D5F5E3
+}
+
+package "部署產出 (deploy/images/qemuarm64-secureboot/)" #FEF9E7 {
+  rectangle "flash.bin (QEMU -bios)\n| Offset | 內容 |\n| 0x00000 (0 KB) | bl1.bin (含 ROTPK Hash) |\n| 0x40000 (256 KB) | fip.bin (憑證鏈 + BL2/BL31/BL32/BL33) |" as flash #FCF3CF
+  rectangle "除錯符號與獨立檔\n• bl1.elf / bl2.elf / bl31.elf\n• optee/tee.elf\n• fip.bin (供 fiptool 拆解/竄改測試)" as elfs #F9E79F
+  rectangle "core-image-base-*.wic.qcow2\n(含 Kernel + OP-TEE User-Space)" as wic #ABEBC6
+}
+
+kbase -down-> tfa
+ktbbr -down-> tfa
+kdbg -down-> optee
+
+ftpm -right-> optee : 內嵌為 Early TA
+optee -down-> tfa : BL32
+uboot -down-> tfa : BL33
+
+tfa -down-> flash : dd 合併 bl1.bin + fip.bin
+tfa -down-> elfs : do_deploy
+linux -down-> wic : wic 打包
+
+@enduml
