@@ -164,6 +164,13 @@ static int load_auth_image_recursive(unsigned int image_id,
 
 這個函式把整個 TBBR 的精髓寫得很俐落：先遞迴驗父憑證（所以日誌會看到 `id=11` → `id=15` 排在 `id=5` 前面載入），再驗自己；而且萬一驗簽失敗，**不等停機就先執行 `zero_normalmem()` + `flush_dcache_range()` 清除記憶體殘留**，防止攻擊者利用殘留在 DRAM 的惡意 payload。
 
+> **補充筆記：為什麼驗簽失敗後一定要立刻 `zero_normalmem()` + `flush_dcache_range()`？**
+> 因為 TF-A 是**「先載入進目標記憶體、再驗簽」**，此時惡意映像已經完整躺在 SRAM／DRAM 裡；在真實系統中驗簽失敗並不一定馬上斷電，若不清零會留下四個風險：
+> 1. **Fallback / A-B 切換或 FWU 備援流程殘留**：`load_auth_image()`（`common/bl_common.c:221-223`）支援透過 `plat_try_next_boot_source()` 切換到備援開機源繼續跑。若不清零，前一次失敗載入的惡意程式碼會殘留在記憶體（尤其是備援映像比惡意映像小時，尾端仍留著攻擊者資料）。
+> 2. **防禦 Fault Injection（錯誤注入）跳過停機判斷**：即使攻擊者用毛刺（Glitch）強行跳過上層 `if (err != 0) plat_error_handler()` 並跳去執行該位址，在 AArch64 上全零 `0x00000000` 是非法指令（`UDF`），一執行就會立刻觸發 Undefined Instruction Exception，無法執行惡意程式。
+> 3. **為什麼還要接 `flush_dcache_range()`**：BL1/BL2 此時已開啟 MMU 與 Write-Back D-Cache，`zero_normalmem()` 寫入的 `0` 可能只停在 CPU D-Cache 尚未寫回實體 SRAM/DRAM；必須 Clean + Invalidate 才能保證 Warm Reset、其他核心或 DMA 讀到的實體記憶體也確實歸零。
+> 4. **為什麼不用一般 `memset()`**：AArch64 的 `zero_normalmem()` 以 `DC ZVA` 做 Cache-line 級高速清零，且以組語實作可避免被編譯器當成 `return` 前的無用寫入（Dead Store Elimination）優化刪掉。
+
 ### 4.4 `auth_mod_verify_img`（`drivers/auth/auth_mod.c:452-513`，主幹）
 
 ```c
