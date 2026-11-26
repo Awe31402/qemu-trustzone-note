@@ -1,0 +1,40 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam dpi 150
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+skinparam ArrowColor #1E293B
+skinparam ArrowFontColor #0F172A
+skinparam ArrowFontSize 11
+
+title BL2 → BL1 → BL31 → OP-TEE → U-Boot 跨特權級啟動全景（TF-A v2.10.4）
+
+package "EL3（Secure Monitor，最高特權級）" #EFF6FF {
+  rectangle "BL1 (Boot ROM @ 0x0)\nbl1_exceptions.S\n接收 BL1_SMC_RUN_IMAGE\n關閉 EL3 MMU 後跳入 BL31" as BL1 #DBEAFE
+  rectangle "BL31 (Runtime @ 0x0e0a0000)\n接管 VBAR_EL3 = runtime_exceptions\n初始化 GICv2、PSCI、OPTEED\n負責 EL3 常駐與世界切換" as BL31 #BFDBFE
+  rectangle "OPTEED (SPD 服務)\nservices/spd/opteed/\n負責啟動 OP-TEE 並轉發\nNS ↔ Secure 的 SMC" as OPTEED #93C5FD
+}
+
+package "Secure EL1（安全世界）" #F0FDF4 {
+  rectangle "BL2 (@ 0x0e06b000)\n初始化 mbedTLS 與 TBBR CoT\n依序驗簽載入 BL31 / BL32 / BL33\n組裝 bl_params_t 交棒清單" as BL2 #DCFCE7
+}
+
+package "Normal World EL1（非安全世界，未開 EL2）" #FFF7ED {
+  rectangle "BL33 / U-Boot 2024.01 (@ 0x60000000)\n由 BL2 通過 TBBR 驗簽載入\nSPSR = 0x3c5 (NS-EL1h), SCR_EL3.NS = 1\n後續負責載入 Linux Kernel Image" as UBOOT #FED7AA
+}
+
+package "Secure EL1（Trusted OS）" #ECFDF5 {
+  rectangle "BL32 / OP-TEE OS (@ 0x0e100000)\n初始化安全記憶體、加密、Early TA\n回報 thread_vector_table 給 BL31\n待命處理 TEE SMC 與 TA 驗簽" as OPTEE #BBF7D0
+}
+
+BL1 -down-> BL2 : "① eret (SPSR=0x3c5)\nBL1 驗簽 BL2 後降權進入"
+BL2 -up-> BL1 : "② smc(BL1_SMC_RUN_IMAGE)\nBL2 在 S-EL1 無法自升 EL3\n借道 BL1 交棒"
+BL1 -right-> BL31 : "③ eret (SPSR=0x3cd, EL3h)\n傳入 x0 = bl_params_t*\nBL1 至此功成身退"
+BL31 -right-> OPTEED : "④ runtime_svc_init()\n呼叫 opteed_setup()\n註冊 bl32_init"
+OPTEED -down-> OPTEE : "⑤ opteed_enter_sp()\n→ el3_exit (S-EL1h)\n同步進入初始化"
+OPTEE -up-> OPTEED : "⑥ smc(RETURN_ENTRY_DONE)\n傳回 thread_vector_table\n返回 bl31_main()"
+BL31 -down-> UBOOT : "⑦ bl31_prepare_next_image_entry()\nSCR_EL3.NS=1, el3_exit (NS-EL1h)\n正式移交給 Normal World"
+
+@enduml

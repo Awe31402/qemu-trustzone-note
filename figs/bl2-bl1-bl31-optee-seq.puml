@@ -1,0 +1,56 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam dpi 150
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 360
+skinparam ParticipantPadding 12
+skinparam ParticipantBackgroundColor #F8FAFC
+skinparam ParticipantBorderColor #334155
+skinparam SequenceLifeLineBorderColor #64748B
+skinparam SequenceArrowColor #1E293B
+skinparam SequenceGroupBorderColor #64748B
+skinparam SequenceGroupHeaderFontColor #0F172A
+skinparam NoteBackgroundColor #FFFDE7
+skinparam NoteBorderColor #D97706
+
+title BL2 → BL1 → BL31 → OP-TEE → U-Boot 跨層交棒時序圖（TF-A v2.10.4 + OP-TEE 4.1.0）
+
+autonumber
+participant "BL2\n(S-EL1)" as BL2
+participant "BL1\n(EL3 ROM)" as BL1
+participant "BL31\n(EL3 Runtime)" as BL31
+participant "OPTEED\n(EL3 SPD)" as OPTEED
+participant "OP-TEE OS\n(S-EL1)" as OPTEE
+participant "U-Boot\n(NS-EL1)" as UBOOT
+
+group #EFF6FF 階段一：BL2 驗簽載入完成，借道 BL1 進入 EL3
+  BL2 -> BL2 : bl2_load_images()\n驗簽並載入 BL31/BL32/BL33\nplat_flush_next_bl_params()
+  BL2 -> BL1 : smc(BL1_SMC_RUN_IMAGE, &bl31_ep_info)\n[bl2/bl2_main.c:150]
+  BL1 -> BL1 : smc_handler64() [bl1_exceptions.S:149]\n檢查 SCR_EL3.NS==0 與目標 MODE_EL3\n印出 "BL1: Booting BL31" (SPSR=0x3cd)\ndisable_mmu_icache_el3() + tlbi alle3
+  BL1 -> BL31 : 載入 x0=&next_bl_params\nexception_return (eret → 0x0e0a0000)
+end
+
+group #F0FDF4 階段二：BL31 接管 EL3 並註冊執行期服務
+  BL31 -> BL31 : bl31_entrypoint() [bl31_entrypoint.S:25]\n設 VBAR_EL3 = runtime_exceptions\nbl31_early_platform_setup2() 複製 BL32/BL33 ep_info\nenable_mmu_el3(0) + plat_qemu_gic_init()
+  BL31 -> OPTEED : runtime_svc_init() → opteed_setup()\n[opteed_main.c:117]\n組裝 OP-TEE Context (pc=0xe100000, x2=DTB)
+  OPTEED --> BL31 : bl31_register_bl32_init(&opteed_init)
+end
+
+group #FFF7ED 階段三：同步啟動 OP-TEE (BL32) 並返回 bl31_main
+  BL31 -> OPTEED : (*bl32_init)() → opteed_init()\n[bl31_main.c:180]
+  OPTEED -> OPTEED : opteed_enter_sp() [opteed_helpers.S:21]\n將 EL3 x19~x30 與 SP 壓棧保存
+  OPTEED -> OPTEE : b el3_exit (eret → S-EL1 @ 0x0e100000)
+  OPTEE -> OPTEE : _start() 初始化 MMU、Heap、Crypto\n載入 Early TA (optee-ftpm)\ndcache_cleaninv_range()
+  OPTEE -> OPTEED : smc #0 [entry_a64.S:442]\nx0 = TEESMC_OPTEED_RETURN_ENTRY_DONE\nx1 = &thread_vector_table
+  OPTEED -> OPTEED : opteed_smc_handler() [opteed_main.c:553]\n儲存 optee_vector_table\n註冊 PSCI PM Hook 與 S-EL1 FIQ Handler
+  OPTEED --> BL31 : opteed_exit_sp() 還原 EL3 堆疊並 ret\n回到 bl31_main() 繼續往下執行！
+end
+
+group #F8FAFC 階段四：切換至 Normal World 啟動 U-Boot (BL33)
+  BL31 -> BL31 : bl31_prepare_next_image_entry()\n[bl31_main.c:247]\n取 bl33_image_ep_info (0x60000000, SPSR=0x3c5)\ncm_prepare_el3_exit_ns() 設定 SCR_EL3.NS=1\n清理 .data/.bss D-Cache
+  BL31 -> UBOOT : b el3_exit (eret → NS-EL1 @ 0x60000000)\n啟動 U-Boot 2024.01
+end
+
+@enduml

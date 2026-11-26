@@ -1,0 +1,42 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam dpi 150
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam ArrowColor #1E293B
+skinparam ArrowFontColor #0F172A
+skinparam ArrowFontSize 11
+
+title BL2 映像載入迴圈與 TBBR 遞迴驗簽流程（bl2_load_images）
+
+rectangle "bl2_mem_params_descs[] 節點表\n(plat/qemu/common/qemu_bl2_mem_params_desc.c)" as DESCS #F8FAFC
+
+package "第 1 輪：BL31（id=3 @ 0x0e0a0000）" #EFF6FF {
+  rectangle "IMAGE_ATTRIB_PLAT_SETUP\n→ bl2_platform_setup()\n寫入 PSCI 節點到 DTB (0x40000000)" as PSETUP #DBEAFE
+  rectangle "load_auth_image(id=3)\n遞迴載入並驗簽：\nid=7 (ROTPK 驗簽，快取兩把世界公鑰)\n→ id=9 (SoC Key Cert)\n→ id=13 (SoC Content Cert)\n→ id=3 (BL31 SHA-256)" as L3 #BFDBFE
+}
+
+package "第 2～4 輪：BL32 / OP-TEE（id=4, 21, 22 @ 0x0e100000）" #F0FDF4 {
+  rectangle "load_auth_image(id=4)\n復用已驗之 id=7 (trusted_world_pk)\n→ id=10 (TOS Key Cert)\n→ id=14 (TOS Content Cert，含 id=4/21/22 雜湊)\n→ id=4 (28-byte OP-TEE Header)" as L4 #DCFCE7
+  rectangle "post_image_load(id=4) → parse_optee_header()\n驗證 magic=0x4554504f, nb_images=1\n清除 id=21 的 SKIP_LOADING 旗標\n保留 id=22 的 SKIP_LOADING\n設定 arg3 = DTB (0x40000000)" as PARSE #BBF7D0
+  rectangle "load_auth_image(id=21)\n直接比對 id=14 已快取之雜湊\n覆寫 0x0e100000 載入 OP-TEE 本體\n（id=22 因 SKIP_LOADING 跳過）" as L21 #86EFAC
+}
+
+package "第 5 輪：BL33 / U-Boot（id=5 @ 0x60000000）" #FFF7ED {
+  rectangle "load_auth_image(id=5)\n復用已驗之 id=7 (non_trusted_world_pk)\n→ id=11 (NT Key Cert)\n→ id=15 (NT Content Cert)\n→ id=5 (U-Boot SHA-256)\n失敗則清零並回傳 -80 (-EAUTH)" as L5 #FED7AA
+  rectangle "post_image_load(id=5)\nqemu_get_spsr_for_bl33_entry()\nEL2 未實作 → SPSR = 0x3c5 (NS-EL1h)" as POST5 #FDBA74
+}
+
+rectangle "交棒準備（bl2_load_images 尾端）\n1. plat_get_next_bl_params() 串起 BL31 → BL32 → BL33\n2. bl31.args.arg0 = &next_bl_params\n3. plat_flush_next_bl_params() 刷出 D-Cache\n4. 回傳 bl31.ep_info 給 bl2_main() 發出 SMC" as HANDOFF #FEF9C3
+
+DESCS -down-> PSETUP
+PSETUP -down-> L3
+L3 -down-> L4
+L4 -down-> PARSE
+PARSE -down-> L21
+L21 -down-> L5
+L5 -down-> POST5
+POST5 -down-> HANDOFF
+
+@enduml
