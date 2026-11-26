@@ -1,0 +1,57 @@
+@startuml
+skinparam dpi 150
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+
+title BL1 驗簽 BL2 (id=6 → id=1) 並透過 eret 交棒至 S-EL1 時序圖
+
+participant "CPU0 (EL3)\nbl1_entrypoint" as CPU #FCF3CF
+participant "bl1_main()\nbl1/bl1_main.c" as BL1 #F9E79F
+participant "load_auth_image\ncommon/bl_common.c" as LOAD #AED6F1
+participant "auth_mod / mbedTLS\ndrivers/auth/" as AUTH #F5B7B1
+participant "QEMU Platform\nqemu_rotpk.S / io" as PLAT #D5F5E3
+participant "BL2 (S-EL1)\n@ 0x0e06b000" as BL2 #E8DAEF
+
+CPU -> CPU : Reset @ 0x0000_0000\n設 VBAR/SCR/SCTLR、搬 .data、建 Stack
+CPU -> PLAT : bl1_setup()：初始化 UART + 開啟 EL3 MMU
+CPU -> BL1 : bl bl1_main()
+activate BL1
+
+BL1 -> AUTH : crypto_mod_init() → 印出 Using crypto library 'mbed TLS'
+BL1 -> AUTH : auth_mod_init() → 初始化 TBBR CoT 表格
+BL1 -> PLAT : plat_qemu_io_setup() → 註冊 Flash 0x40000 FIP 裝置
+
+BL1 -> LOAD : bl1_load_bl2() → load_auth_image(BL2_IMAGE_ID = 1)
+activate LOAD
+
+LOAD -> AUTH : auth_mod_get_parent_id(1) → parent = 6 (TB_FW_CERT)
+LOAD -> PLAT : load_image(id=6) 從 FIP 讀至 0x0e06b000 (0x4be bytes)
+LOAD -> AUTH : auth_mod_verify_img(id=6)
+AUTH -> PLAT : plat_get_rotpk_info() → 取得內嵌 qemu_rotpk_hash
+AUTH -> AUTH : mbedTLS 驗證 id=6 公鑰符合 ROTPK Hash\n並驗證 X.509 RSA 簽章 → 取出 BL2 預期 SHA-256
+AUTH --> LOAD : 0 (id=6 憑證驗簽通過)
+
+LOAD -> PLAT : load_image(id=1) 從 FIP 讀至 0x0e06b000 (0x125d1 bytes，覆寫暫存憑證)
+LOAD -> AUTH : auth_mod_verify_img(id=1)
+AUTH -> AUTH : mbedTLS auth_hash() 計算 BL2 SHA-256 並比對
+alt BL2 未被竄改
+  AUTH --> LOAD : 0 (BL2 驗簽通過！)
+  LOAD --> BL1 : 0 → 印出 NOTICE: BL1: Booting BL2
+else BL2 被竄改 (如 Lab 4B)
+  AUTH --> LOAD : 非 0 (失敗)
+  LOAD -> LOAD : zero_normalmem(0xe06b000) + return -EAUTH (-80)
+  LOAD --> BL1 : -80 → ERROR: Failed to load BL2 firmware → Panic 停機
+end
+deactivate LOAD
+
+BL1 -> BL1 : bl1_prepare_next_image(1)\n寫入 ELR_EL3 = 0x0e06b000, SPSR_EL3 = 0x3c5 (S-EL1h)
+BL1 --> CPU : 返回 bl1_entrypoint
+deactivate BL1
+
+CPU -> BL2 : b el3_exit → 還原暫存器並執行 eret (EL3 → S-EL1)
+activate BL2
+BL2 -> BL2 : NOTICE: BL2: v2.10.4 開始執行！
+
+@enduml

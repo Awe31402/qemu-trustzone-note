@@ -1,0 +1,26 @@
+@startuml
+skinparam dpi 150
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+
+title BL1 從 CPU 上電到跳轉 BL2 的五大執行階段（TF-A v2.10.4）
+
+rectangle "階段一：EL3 組語啟動與 C 環境建立\nbl1_entrypoint() → el3_entrypoint_common\n• 寫入 SCTLR_EL3 / SCR_EL3 / MDCR_EL3 / VBAR_EL3\n• 副核送進 Holding Pen，僅主核 (CPU0) 繼續\n• 搬移 .data 至 0xe0ee000、清零 .bss、設定 EL3 Stack" as S1 #FCF3CF
+
+rectangle "階段二：早期平台初始化與開啟 MMU\nbl1_setup() → bl1_early_platform_setup() + bl1_plat_arch_setup()\n• 初始化 PL011 UART (qemu_console_init)\n• 建立 EL3 Page Tables (ROM RO / SRAM RW / Device)\n• 呼叫 enable_mmu_el3(0) 開啟 MMU 與 Cache" as S2 #D6EAF8
+
+rectangle "階段三：密碼學、驗簽框架與 FIP 裝置註冊\nbl1_main()\n• 印出歡迎字串與 BL1: RAM 0xe0ee000 - 0xe0f8000\n• crypto_mod_init() → 啟用 mbed TLS\n• auth_mod_init() → 載入 CoT 驗證規則\n• plat_qemu_io_setup() → 掛載 0x40000 的 fip.bin" as S3 #D5F5E3
+
+rectangle "階段四：載入並以 ROTPK 驗簽 BL2（TBBR 核心）\nbl1_load_bl2() → load_auth_image(BL2_IMAGE_ID=1)\n• 遞迴先載入 id=6 (TB_FW_CERT) 到 0xe06b000\n• 呼叫 plat_get_rotpk_info() 取得 qemu_rotpk_hash 驗簽憑證\n• 再覆寫載入 id=1 (BL2) 到 0xe06b000 並比對 SHA-256" as S4 #FADBD8
+
+rectangle "階段五：組裝 S-EL1 Context 並 eret 交棒給 BL2\nbl1_prepare_next_image(1) → el3_exit()\n• 設定 ELR_EL3 = 0x0e06b000 (BL2 入口)\n• 設定 SPSR_EL3 = 0x3c5 (AArch64 EL1h, DAIF 全關)\n• 執行 eret 降級至 Secure EL1 開始跑 BL2！" as S5 #E8DAEF
+
+S1 -down-> S2
+S2 -down-> S3
+S3 -down-> S4
+S4 -down-> S5
+
+@enduml

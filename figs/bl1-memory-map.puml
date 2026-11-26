@@ -1,0 +1,39 @@
+@startuml
+skinparam dpi 150
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+
+title QEMU ARMv8 BL1 啟動期實體記憶體配置圖（plat/qemu/qemu/include/platform_def.h）
+
+package "Secure Flash / ROM (0x0000_0000 起)" #FEF9E7 {
+  rectangle "0x0000_0000 ~ 0x0002_0000 (128 KB)\nBL1_RO (bl1.bin / 模擬不可變 BootROM)\n• bl1_entrypoint @ 0x0000_0000\n• 內嵌 qemu_rotpk_hash (DER + SHA-256)" as rom #FCF3CF
+  rectangle "0x0004_0000 ~ 0x0044_0000 (最大 4 MB)\nPLAT_QEMU_FIP_BASE (fip.bin)\n• id=6 TB_FW_CERT (offset 0x1D0EBB)\n• id=1 BL2 映像 (offset 0x268)" as fip #F9E79F
+}
+
+package "Secure SRAM (0x0E00_0000 ~ 0x0E10_0000, 1 MB)" #EBF5FB {
+  rectangle "0x0E00_0000 ~ 0x0E00_1000 (4 KB)\nSHARED_RAM\nTrusted Mailbox & 副核 Holding Pen" as sram_sh #D6EAF8
+  rectangle "0x0E06_B000 ~ 0x0E0A_0000 (212 KB)\nBL2_BASE（目標載入區）\n• 先載入 id=6 (0xe06b000..0xe06b4be) 驗簽\n• 再覆寫載入 id=1 BL2 (0xe06b000..0xe07d5d1)" as sram_bl2 #FADBD8
+  rectangle "0x0E0A_0000 ~ 0x0E0E_E000\nBL31 預留區（後續由 BL2 載入）" as sram_bl31 #AED6F1
+  rectangle "0x0E0E_E000 ~ 0x0E10_0000 (72 KB)\nBL1_RW（實測 log：0xe0ee000 - 0xe0f8000）\n• 由 ROM 搬移的 .data\n• 清零的 .bss / Page Tables / EL3 Stack" as sram_bl1rw #F5CBA7
+}
+
+package "Secure & Non-Secure DRAM" #E8F8F5 {
+  rectangle "0x0E10_0000 ~ 0x0F00_0000 (15 MB)\nSEC_DRAM (OP-TEE OS 用)" as sdram #D1F2EB
+  rectangle "0x4000_0000 ~ 0x8000_0000 (1 GB)\nNS_DRAM0 (DTB @ 0x4000_0000, U-Boot @ 0x6000_0000)" as nsdram #ABEBC6
+}
+
+rom -[hidden]down-> fip
+fip -[hidden]down-> sram_sh
+sram_sh -[hidden]down-> sram_bl2
+sram_bl2 -[hidden]down-> sram_bl31
+sram_bl31 -[hidden]down-> sram_bl1rw
+sram_bl1rw -[hidden]down-> sdram
+sdram -[hidden]down-> nsdram
+
+rom -right-> sram_bl1rw : ① 組語階段搬移 .data 至 SRAM
+fip -right-> sram_bl2 : ② BL1 讀取並驗簽 id=6 與 id=1
+
+@enduml
