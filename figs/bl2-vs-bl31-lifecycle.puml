@@ -1,0 +1,29 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam dpi 150
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+skinparam ArrowColor #1E293B
+skinparam ArrowFontColor #0F172A
+skinparam ArrowFontSize 11
+
+title BL2（一次性開機載入）vs BL31（永久常駐 EL3 監控器）生命週期與攻擊面比較
+
+package "開機階段（Boot Time）" #F0FDF4 {
+  rectangle "BL2（Secure EL1 @ 0x0e06b000，約 73.5 KB）\n────────────────────────────\n• 生命週期：一次性（載完即退場、記憶體可回收）\n• 內含模組：FIP I/O、FDT、X.509 解析、mbed TLS\n• 核心任務：初始化平台/DTB、TBBR 驗簽並載入\n  BL31 / BL32 (OP-TEE) / BL33 (U-Boot)" as BL2 #DCFCE7
+}
+
+package "常駐執行階段（Runtime：從開機持續到斷電）" #EFF6FF {
+  rectangle "BL31（EL3 @ 0x0e0a0000，約 52.1 KB）\n────────────────────────────\n• 生命週期：永久常駐（絕不退場）\n• 內含模組：精簡 TCB（無 Flash I/O、無 mbedTLS）\n• 核心任務：\n  1. 接管 VBAR_EL3 = runtime_exceptions\n  2. PSCI（多核 CPU_ON / 休眠喚醒 → bl31_warm_entrypoint）\n  3. OPTEED（Normal ↔ Secure 世界切換與 SMC 轉發）" as BL31 #BFDBFE
+}
+
+rectangle "退場釋放\nBL2 程式碼與 mbedTLS\n不再暴露於執行期" as GONE #FEF2F2
+rectangle "Linux / OP-TEE 執行期互動\n• PSCI SMC（電源管理與多核）\n• TEE SMC（Linux ↔ OP-TEE 切換）" as RT #FFF7ED
+
+BL2 -right-> BL31 : "smc(BL1_SMC_RUN_IMAGE)\n經 BL1 移交 bl_params_t"
+BL2 -down-> GONE : "開機完成後退場\n縮小常駐 EL3 攻擊面"
+BL31 <-down-> RT : "常駐處理所有 EL3 SMC\n與安全中斷路由"
+
+@enduml
