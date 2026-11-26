@@ -44,6 +44,10 @@
 kas/base.yml                                                        ---- 基礎 kas 設定（layers、鎖定 commit、cache、OP-TEE 套件）
 kas/tbbr.yml                                                        ---- TF-A TBBR overlay（開啟 mbedTLS + CoT 驗簽 + ELF 部署）
 kas/debug.yml                                                       ---- OP-TEE debug log overlay（CFG_TEE_CORE_LOG_LEVEL=3）
+scripts/build.sh                                                    ---- 一鍵執行 kas build（預設帶 base:tbbr:debug）
+scripts/shell.sh                                                    ---- 進入 kas shell（供單獨 bitbake / devtool 操作）
+scripts/run-qemu.sh                                                 ---- 直接啟動 QEMU ARMv8 安全開機環境（支援 -s -S 掛 GDB）
+scripts/tamper-test.sh                                              ---- 竄改 flash.bin 中 BL33 單一 byte 並實測 TBBR 攔截
 layers/meta-arm/meta-arm/conf/machine/qemuarm64-secureboot.conf     ---- QEMU 旗標、flash.bin、wic 與 optee-ftpm 設定
 layers/meta-arm/meta-arm/recipes-bsp/trusted-firmware-a/            ---- TF-A 2.10.4 主配方與 qemuarm64-secureboot 的 flash.bin 打包規則
 layers/meta-arm/meta-arm/recipes-security/optee/                    ---- OP-TEE 4.1.0 (OS / Client / Test / Examples) 配方
@@ -144,12 +148,24 @@ cd /home/awe/disk/qemu-trustzone
   'bitbake -e trusted-firmware-a | grep -E "^(TFA_MBEDTLS|TFA_INSTALL_TARGET|TFA_SPD|TFA_UBOOT|EXTRA_OEMAKE)="'
 ```
 
-確認參數無誤後，啟動完整建置（20 核心首次從頭編譯約需 25–45 分鐘）：
+確認參數無誤後，啟動完整建置（首次從頭編譯共 6,149 個任務）：
 
 ```bash
 cd /home/awe/disk/qemu-trustzone
-.venv/bin/kas build kas/base.yml:kas/tbbr.yml:kas/debug.yml
+./scripts/build.sh
+# 等同於：.venv/bin/kas build kas/base.yml:kas/tbbr.yml:kas/debug.yml
 ```
+
+> **實務踩坑筆記（`linux-yocto` 下載過慢／斷線解法）**：  
+> BitBake 預設會以 `git clone --bare --mirror` 拉取整個 `linux-yocto.git`（約 3.8 GB、1,595 萬個物件），在跨海線路不穩時容易 TLS 斷線。若遇到 `linux-yocto do_fetch` 失敗，可先用單分支淺層抓取至 `yocto-cache/downloads/git2/`（僅 ~242 MiB，1 分鐘完成），BitBake 偵測到目標 commit 已存在即會直接跳過 mirror clone：
+> ```bash
+> REPO=yocto-cache/downloads/git2/git.yoctoproject.org.linux-yocto.git
+> rm -rf "$REPO" && git init --bare "$REPO"
+> git -C "$REPO" remote add origin https://git.yoctoproject.org/linux-yocto.git
+> git -C "$REPO" -c http.version=HTTP/1.1 fetch --depth 5 --progress origin \
+>   refs/heads/v6.6/standard/qemuarm64:refs/heads/v6.6/standard/qemuarm64
+> git -C "$REPO" symbolic-ref HEAD refs/heads/v6.6/standard/qemuarm64
+> ```
 
 ### 4.4 日常單一元件重編與改碼工作流
 
@@ -185,26 +201,32 @@ bitbake trusted-firmware-a
 
 ![qemuarm64-secureboot 開機與 TBBR 驗簽時序](figs/boot-verify-seq.png)
 
-透過 `kas shell` 呼叫 Yocto 內建的 `runqemu`（自動帶入 `-machine virt,secure=on -bios flash.bin` 與剛編好的新版 QEMU）：
+直接透過輔助腳本啟動（使用剛編好的新版 QEMU，並以 `/tmp` 副本保護原始 `wic.qcow2`）：
 
 ```bash
 cd /home/awe/disk/qemu-trustzone
-.venv/bin/kas shell kas/base.yml:kas/tbbr.yml:kas/debug.yml -c \
-  'runqemu qemuarm64-secureboot nographic slirp'
+
+# 正常開機（退出 QEMU：先按 Ctrl-A，放開後按 X）
+./scripts/run-qemu.sh
+
+# 掛上 GDB Server 並停在 BL1 Reset Vector（另開終端連 localhost:1234）
+./scripts/run-qemu.sh -s -S
+
+# 一鍵實測 TBBR 竄改攔截（翻轉 BL33 U-Boot 單一 byte）
+./scripts/tamper-test.sh
 ```
 
-> 退出 QEMU 快捷鍵：先按 `Ctrl-A`，放開後按 `X`。
+*(也可在 `kas shell` 內使用 Yocto 內建的 `runqemu qemuarm64-secureboot nographic slirp`。)*
 
-### 5.1 實機驗證項目（建置完成後補齊實測 Log）
+### 5.1 實機驗證結果（2026-11-26 實測）
 
-進入 Linux 後（預設帳號 `root`，無密碼），依序驗證各層是否正常工作：
-
-| 驗證層級 | 執行指令 / 觀察方式 | 預期結果 | 實測 Log |
+| 驗證項目 | 做法 | 實測結果 | 原始 Log |
 | :--- | :--- | :--- | :--- |
-| **TF-A BL1 / BL2 TBBR** | 觀察開機初期 Console 輸出 | 顯示 `Booting Trusted Firmware` 與 BL1/BL2 透過 mbedTLS 驗簽 FIP 憑證與各映像 | *(建置完成後補入 `logs/`)* |
-| **OP-TEE OS & fTPM** | 觀察 BL32 啟動訊息與 Linux `dmesg \| grep -i -E "optee\|tpm"` | OP-TEE 4.1.0 初始化完成，存在 `/dev/tee0`、`/dev/teepriv0`、`/dev/tpm0` | *(建置完成後補入 `logs/`)* |
-| **OP-TEE User-Space** | `optee_example_hello_world` 與 `xtest` | Hello World 數值遞增成功，`xtest` 測試通過 | *(建置完成後補入 `logs/`)* |
-| **TBBR 竄改攔截實驗** | 竄改 `flash.bin` 中 `fip.bin` 區段 1 byte 後開機 | BL1/BL2 驗簽失敗並直接 Panic 停機 | *(建置完成後補入 `logs/`)* |
+| **FIP 憑證鏈結構** | `fiptool info fip.bin` | 確認包含 BL2/BL31/BL32/BL33 與完整 8 張 TBBR X.509 金鑰／內容憑證（`trusted-key-cert`、`tb-fw-cert`、`soc/tos/nt-fw-key/content-cert`） | [fiptool-info.log](logs/fiptool-info.log) |
+| **TF-A BL1/BL2 TBBR 正常開機** | 啟動 QEMU 觀察早期 Console | BL1/BL2 使用 `mbed TLS` 逐一載入並驗簽 `id=6`→`id=1` (BL2)→`id=7,9,13,3` (BL31)→`id=10,14,4,21` (OP-TEE + fTPM)→`id=11,15,5` (U-Boot @ `0x60000000`) | [boot-and-optee-verify.log](logs/boot-and-optee-verify.log) |
+| **OP-TEE Driver & fTPM** | Linux 內執行 `dmesg \| grep -i -E "optee\|tee\|tpm"` 與 `ls -l /dev/tee*` | `optee: revision 4.1 (18b424c2)`、`dynamic shared memory is enabled`、`/dev/tee0` 與 `/dev/teepriv0` 就緒、`tee-supplicant` 啟動、關機時可見 `tpm0` (`ftpm_tee`) 註冊 | [boot-and-optee-verify.log](logs/boot-and-optee-verify.log) |
+| **OP-TEE Hello World & `xtest`** | 執行 `optee_example_hello_world` 與 `xtest -t regression 1001..1008` | `TA incremented value to 43`；`xtest` **8 test cases / 120 subtests 全部通過（0 failed）**，含 `1008.4 Load corrupt TA OK` | [boot-and-optee-verify.log](logs/boot-and-optee-verify.log) |
+| **TBBR 竄改攔截實驗** | 翻轉 `flash.bin` 偏移 `0x10fd09`（BL33 U-Boot 內）1 byte（`0x00 → 0xff`）後開機 | BL2 載入憑證 `id=11,15` 與 `id=5` (BL33) 後驗簽失敗，印出 **`ERROR: BL2: Failed to load image id 5 (-80)`**（`-EAUTH`）直接中止開機 | [tbbr-tamper-test.log](logs/tbbr-tamper-test.log) |
 
 ---
 

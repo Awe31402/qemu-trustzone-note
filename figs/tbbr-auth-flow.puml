@@ -1,0 +1,59 @@
+@startuml
+skinparam dpi 150
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+
+title TF-A BL2 遞迴驗簽 BL33 (id=5) 與竄改攔截 (-EAUTH / -80) 時序圖
+
+participant "bl2_load_images()\nbl2_image_load_v2.c" as BL2 #FCF3CF
+participant "load_auth_image_recursive()\ncommon/bl_common.c" as REC #AED6F1
+participant "auth_mod_verify_img()\ndrivers/auth/auth_mod.c" as AUTH #F5B7B1
+participant "mbedTLS\ncrypto_mod" as MBED #D2B4DE
+participant "DRAM @ 0x60000000\n(BL33 載入區)" as DRAM #E8F8F5
+
+BL2 -> REC : load_auth_image(id=5 / BL33)
+activate REC
+
+REC -> REC : 查詢 parent：id=5 → id=15 → id=11 → id=7
+note right of REC
+  id=7 (Trusted Key Cert) 在載入 BL31 時已驗證過
+  因此遞迴依序載入並驗證 id=11 → id=15 → id=5
+end note
+
+REC -> DRAM : load_image(id=11: NT_FW_KEY_CERT)
+REC -> AUTH : auth_mod_verify_img(id=11)
+AUTH -> MBED : 驗證 X.509 簽章 (Non-Trusted World Key)
+MBED --> AUTH : OK (取出 NT_FW_KEY 公鑰)
+AUTH --> REC : 0 (PASS)
+
+REC -> DRAM : load_image(id=15: NT_FW_CONTENT_CERT)
+REC -> AUTH : auth_mod_verify_img(id=15)
+AUTH -> MBED : 驗證 X.509 簽章 (NT_FW_KEY)
+MBED --> AUTH : OK (取出 BL33 預期 SHA-256 Hash)
+AUTH --> REC : 0 (PASS)
+
+REC -> DRAM : load_image(id=5: BL33 U-Boot, 0xFFDD8 bytes)
+note right of DRAM
+  正常實驗：資料完整
+  竄改實驗：0x10FD09 處 0x00 → 0xFF
+end note
+
+REC -> AUTH : auth_mod_verify_img(id=5)
+AUTH -> MBED : auth_hash() 計算並比對 SHA-256
+
+alt 正常開機 (未竄改)
+  MBED --> AUTH : Hash 吻合 (0)
+  AUTH --> REC : 0 (PASS)
+  REC --> BL2 : 0 → 繼續跳轉 BL31 → OP-TEE → U-Boot
+else 竄改實驗 (翻轉 1 byte)
+  MBED --> AUTH : Hash 不符 (非 0)
+  AUTH --> REC : 驗證失敗
+  REC -> DRAM : zero_normalmem() + flush_dcache_range()\n立即清零 DRAM 內的惡意映像！
+  REC --> BL2 : 回傳 -EAUTH (-80)
+  BL2 -> BL2 : 印出 ERROR: BL2: Failed to load image id 5 (-80)\n呼叫 plat_error_handler(-80) → Panic 停機
+end
+
+deactivate REC
+@enduml

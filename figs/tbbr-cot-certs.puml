@@ -1,0 +1,56 @@
+@startuml
+skinparam dpi 150
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+
+title FIP 內 TBBR 信任鏈 (Chain of Trust) 與實測 Image ID 對應圖
+
+rectangle "ROTPK Hash (內嵌於 BL1, offset 0x0)\n開發用 RSA 金鑰：arm_rotprivk_rsa.pem" as rotpk #FCF3CF
+
+package "BL1 驗證階段" #FEF9E7 {
+  rectangle "id=6：TB_FW_CERT\n(--tb-fw-cert)\nFIP offset 0x1D0EBB, 0x4BE B" as id6 #F9E79F
+  rectangle "id=1：BL2 (TB_FW)\n(--tb-fw)\nFIP offset 0x268, 0x125D1 B" as id1 #F5CBA7
+}
+
+package "BL2 驗證階段 (讀取 FIP offset 0x40000)" #EBF5FB {
+  rectangle "id=7：TRUSTED_KEY_CERT\n(--trusted-key-cert)\nFIP offset 0x1CF9E1, 0x616 B\n內含 Trusted World Key & Non-Trusted World Key" as id7 #D6EAF8
+
+  package "BL31 信任分支 (EL3 Runtime)" #FDEDEC {
+    rectangle "id=9：SOC_FW_KEY_CERT\noffset 0x1CFFF7" as id9 #FADBD8
+    rectangle "id=13：SOC_FW_CONTENT_CERT\noffset 0x1D1379" as id13 #F5B7B1
+    rectangle "id=3：BL31 (SOC_FW)\noffset 0x12839, 0xD06C B" as id3 #F1948A
+  }
+
+  package "BL32 信任分支 (OP-TEE + fTPM)" #F4ECF7 {
+    rectangle "id=10：TOS_FW_KEY_CERT\noffset 0x1D04D9" as id10 #E8DAEF
+    rectangle "id=14：TOS_FW_CONTENT_CERT\noffset 0x1D17B1" as id14 #D2B4DE
+    rectangle "id=4 / 21：OP-TEE header & pager\noffset 0x1F8A5 / 0x1F8C1 (0xB0348 B)" as id4 #BB8FCE
+  }
+
+  package "BL33 信任分支 (U-Boot，本次竄改實驗目標)" #E8F8F5 {
+    rectangle "id=11：NT_FW_KEY_CERT\noffset 0x1D09C9" as id11 #D1F2EB
+    rectangle "id=15：NT_FW_CONTENT_CERT\noffset 0x1D1C87" as id15 #A3E4D7
+    rectangle "id=5：BL33 U-Boot (NT_FW)\noffset 0xCFC09, 0xFFDD8 B\n★ 實驗翻轉 0x10FD09 1 byte" as id5 #F5B7B1
+  }
+}
+
+rotpk -down-> id6 : 驗簽憑證
+id6 -down-> id1 : 驗證 SHA-256 Hash
+rotpk -down-> id7 : 驗簽根金鑰憑證
+
+id7 -down-> id9 : Trusted World Key
+id9 -down-> id13 : SoC FW Key
+id13 -down-> id3 : 驗證 BL31 Hash
+
+id7 -down-> id10 : Trusted World Key
+id10 -down-> id14 : TOS FW Key
+id14 -down-> id4 : 驗證 OP-TEE Hash
+
+id7 -down-> id11 : Non-Trusted World Key
+id11 -down-> id15 : NT FW Key
+id15 -down-> id5 : 驗證 BL33 Hash\n(竄改後失敗 → -80)
+
+@enduml
