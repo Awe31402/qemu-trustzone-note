@@ -1,0 +1,41 @@
+@startuml
+skinparam dpi 150
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+
+title flash.bin 位元組佈局與 Lab 4 三組竄改測試位置對照
+
+package "flash.bin (總長 ~2.1 MB，位於 deploy/images/qemuarm64-secureboot/)" #FEF9E7 {
+
+  rectangle "0x00000 ~ 0x11Bxx (71 KB)\nbl1.bin (TF-A BL1 / 模擬不可變 BootROM)\n內嵌 ROTPK Hash" as bl1 #FCF3CF
+
+  package "0x40000 起 (seek=64, bs=4096)：fip.bin (~1.9 MB)" #EBF5FB {
+    rectangle "FIP + 0x000268 → flash 0x040268\nBL2 (id=1, 74 KB)\n★ Lab 4B 竄改點：0x040368" as bl2 #FADBD8
+    rectangle "FIP + 0x012839 → flash 0x052839\nBL31 (id=3, 53 KB)" as bl31 #D6EAF8
+    rectangle "FIP + 0x01F8A5 → flash 0x05F8A5\nBL32 OP-TEE + fTPM (id=4 / 21, 705 KB)" as bl32 #D6EAF8
+    rectangle "FIP + 0x0CFC09 → flash 0x10FC09\nBL33 U-Boot (id=5, 1.0 MB)\n★ Lab 4A 竄改點：0x10FD09" as bl33 #F5B7B1
+    rectangle "FIP + 0x1CF9E1 ~ 0x1D20CF\n8 張 TBBR X.509 憑證區\n其中 id=15 (NT_FW_CONTENT_CERT) @ 0x211C87\n★ Lab 4C 竄改點：0x211D07" as certs #F1948A
+  }
+}
+
+rectangle "Lab 4B 預期結果\nBL1 在進入 BL2 前直接攔截\n(id=1 驗證失敗)" as r4b #FDEDEC
+rectangle "Lab 4A 預期結果\nBL2 驗完 id=11,15 後攔截 id=5\nERROR: BL2: Failed to load image id 5 (-80)" as r4a #FDEDEC
+rectangle "Lab 4C 預期結果\nBL2 在憑證層即攔截\n還沒載入 BL33 就報 id=15 (-80)" as r4c #FDEDEC
+
+bl1 -[hidden]down-> bl2
+bl2 -[hidden]down-> bl31
+bl31 -[hidden]down-> bl32
+bl32 -[hidden]down-> bl33
+bl33 -[hidden]down-> certs
+
+bl2 -right-> r4b
+bl33 -right-> r4a
+certs -right-> r4c
+
+r4b -[hidden]down-> r4a
+r4a -[hidden]down-> r4c
+
+@enduml

@@ -1,0 +1,24 @@
+@startuml
+skinparam dpi 150
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+
+title 安全開機手動實驗路線圖（Lab 1 ~ Lab 6）
+
+rectangle "Lab 1：拆解 FIP 與檢查 X.509 憑證\n• fiptool info / unpack\n• openssl x509 讀憑證並比對 sha256sum" as L1 #FCF3CF
+rectangle "Lab 2：手動組 QEMU 指令正常開機\n• 理解 -machine virt,secure=on / -bios / -kernel\n• 觀察 BL1 → BL2 → BL31 → U-Boot → Linux" as L2 #D6EAF8
+rectangle "Lab 3：Linux 內驗證 OP-TEE 與 TA\n• dmesg / /dev/tee0 / /lib/optee_armtz/\n• optee_example_hello_world & xtest 1008.4" as L3 #D5F5E3
+rectangle "Lab 4：親手竄改 flash.bin 三處區段\n• 4A 改 BL33 (BL2 攔 id=5)\n• 4B 改 BL2 (BL1 攔 id=1)\n• 4C 改憑證 (BL2 攔 id=15)" as L4 #FADBD8
+rectangle "Lab 5：gdb-multiarch 單步追蹤驗簽\n• QEMU -s -S + bl2.elf\n• 斷點 auth_mod_verify_img() 看清零與 -80" as L5 #E8DAEF
+rectangle "Lab 6：切換無 TBBR 對照組（進階）\n• 拿掉 kas/tbbr.yml 重編 TF-A\n• 感受沒有驗簽把關時的差異" as L6 #F5EEF8
+
+L1 -down-> L2
+L2 -down-> L3
+L3 -down-> L4
+L4 -down-> L5
+L5 -down-> L6
+
+@enduml
