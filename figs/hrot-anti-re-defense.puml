@@ -1,0 +1,54 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam dpi 150
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+skinparam ArrowColor #1E293B
+skinparam ArrowFontColor #0F172A
+skinparam ArrowFontSize 11
+
+title Hardware Root of Trust（HRoT）防逆向工程五層縱深防禦模型
+
+package "攻擊者逆向工程路徑（Attack Vectors）" #FEF2F2 {
+  rectangle "① 拆 Flash 晶片 dump 韌體反組譯（靜態逆向）" as A1 #FECACA
+  rectangle "② 接 JTAG / SWD 單步除錯讀 RAM（動態逆向）" as A2 #FECACA
+  rectangle "③ 竄改 Bootloader 植入傾印程式（程式注入）" as A3 #FECACA
+  rectangle "④ 刷回舊版韌體利用已知漏洞（降級攻擊）" as A4 #FECACA
+  rectangle "⑤ 從 Linux / DMA 跨界偷讀安全區（越權竊取）" as A5 #FECACA
+}
+
+package "HRoT 硬體信任根防線（Mask ROM + eFuse/OTP + HUK）" #EFF6FF {
+  rectangle "防線 1：韌體／TA 加密（Encrypted Boot + HUK / PUF）\n金鑰僅硬體 Keyladder 可用，CPU 軟體無法讀取" as D1 #BFDBFE
+  rectangle "防線 2：硬體 Debug 鎖死（eFuse 關閉 JTAG / SPIDEN）\n僅原廠私鑰簽章且綁定 UID 的 Debug Token 可解鎖" as D2 #BFDBFE
+  rectangle "防線 3：安全開機驗簽（Mask ROM BL1 + eFuse ROTPK）\nTBBR 信任鏈，改動 1 bit 即清零停機 [本環境已實測]" as D3 #DCFCE7
+  rectangle "防線 4：硬體防降級（OTP 單調遞增 NV Counter）\nTBBR 憑證 nv_ctr 低於硬體計數器即拒載" as D4 #BFDBFE
+  rectangle "防線 5：硬體記憶體隔離（TrustZone TZC-400 / 防火牆）\n匯流排層阻絕 Normal World CPU 與非安全 DMA" as D5 #BFDBFE
+}
+
+A5 -[hidden]right-> A4
+A4 -[hidden]right-> A3
+A3 -[hidden]right-> A2
+A2 -[hidden]right-> A1
+
+D5 -[hidden]right-> D4
+D4 -[hidden]right-> D3
+D3 -[hidden]right-> D2
+D2 -[hidden]right-> D1
+
+A1 --> D1 : "阻斷"
+A2 --> D2 : "阻斷"
+A3 --> D3 : "阻斷"
+A4 --> D4 : "阻斷"
+A5 --> D5 : "阻斷"
+
+legend bottom
+  <b>本 QEMU 環境對應狀態</b>
+  • 綠色（防線 3）＋ OP-TEE TA 簽章：已啟用並完成實測驗證
+  • 藍色（防線 1 / 4）：TF-A v2.10.4（DECRYPTION_SUPPORT=aes_gcm）與 OP-TEE（CFG_ENCRYPT_TA）原生支援，可延伸實驗
+  • 物理硬體（防線 2 / 5 / 抗 Glitch 與側通道 SCA）：需真實量產 SoC 搭配 eFuse 與硬體感測器
+endlegend
+
+@enduml
