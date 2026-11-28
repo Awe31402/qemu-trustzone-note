@@ -1,0 +1,478 @@
+NOTICE:  Booting Trusted Firmware
+NOTICE:  BL1: v2.10.4(release):lts-v2.10.4-dirty
+NOTICE:  BL1: Built : 16:23:33, Apr 26 2024
+INFO:    BL1: RAM 0xe0ee000 - 0xe0fa000
+INFO:    Using crypto library 'mbed TLS'
+INFO:    BL1: Loading BL2
+INFO:    Loading image id=6 at address 0xe06b000
+INFO:    Image id=6 loaded: 0xe06b000 - 0xe06b4be
+INFO:    Loading image id=1 at address 0xe06b000
+INFO:    Image id=1 loaded: 0xe06b000 - 0xe07f5d1
+NOTICE:  BL1: Booting BL2
+INFO:    Entry point address = 0xe06b000
+INFO:    SPSR = 0x3c5
+NOTICE:  BL2: v2.10.4(release):lts-v2.10.4-dirty
+NOTICE:  BL2: Built : 16:23:33, Apr 26 2024
+INFO:    Using crypto library 'mbed TLS'
+INFO:    BL2: Doing platform setup
+INFO:    BL2: Loading image id 3
+INFO:    Loading image id=7 at address 0xe0a0000
+INFO:    Image id=7 loaded: 0xe0a0000 - 0xe0a0616
+INFO:    Loading image id=9 at address 0xe0a0000
+INFO:    Image id=9 loaded: 0xe0a0000 - 0xe0a04e2
+INFO:    Loading image id=13 at address 0xe0a0000
+INFO:    Image id=13 loaded: 0xe0a0000 - 0xe0a0438
+INFO:    Loading image id=3 at address 0xe0a0000
+INFO:    Image id=3 loaded: 0xe0a0000 - 0xe0ad06c
+INFO:    BL2: Loading image id 4
+INFO:    Loading image id=10 at address 0xe100000
+INFO:    Image id=10 loaded: 0xe100000 - 0xe1004f0
+INFO:    Loading image id=14 at address 0xe100000
+INFO:    Image id=14 loaded: 0xe100000 - 0xe1004d6
+INFO:    Loading image id=4 at address 0xe100000
+INFO:    Image id=4 loaded: 0xe100000 - 0xe10001c
+INFO:    OPTEE ep=0xe100000
+INFO:    OPTEE header info:
+INFO:          magic=0x4554504f
+INFO:          version=0x2
+INFO:          arch=0x1
+INFO:          flags=0x0
+INFO:          nb_images=0x1
+INFO:    BL2: Loading image id 21
+INFO:    Loading image id=21 at address 0xe100000
+INFO:    Image id=21 loaded: 0xe100000 - 0xe1b0348
+INFO:    BL2: Skip loading image id 22
+INFO:    BL2: Loading image id 5
+INFO:    Loading image id=11 at address 0x60000000
+INFO:    Image id=11 loaded: 0x60000000 - 0x600004f2
+INFO:    Loading image id=15 at address 0x60000000
+INFO:    Image id=15 loaded: 0x60000000 - 0x60000448
+INFO:    Loading image id=5 at address 0x60000000
+INFO:    Image id=5 loaded: 0x60000000 - 0x60100a40
+NOTICE:  BL1: Booting BL31
+INFO:    Entry point address = 0xe0a0000
+INFO:    SPSR = 0x3cd
+NOTICE:  BL31: v2.10.4(release):lts-v2.10.4-dirty
+NOTICE:  BL31: Built : 16:23:33, Apr 26 2024
+INFO:    ARM GICv2 driver initialized
+INFO:    BL31: Initializing runtime services
+INFO:    BL31: Initializing BL32
+INFO:    BL31: Preparing for EL3 exit to normal world
+INFO:    Entry point address = 0x60000000
+INFO:    SPSR = 0x3c5
+
+
+U-Boot 2024.01 (Jan 08 2024 - 15:37:48 +0000)
+
+DRAM:  1 GiB
+Core:  51 devices, 14 uclasses, devicetree: board
+Flash: 32 MiB
+Loading Environment from Flash... *** Warning - bad CRC, using default environment
+
+In:    serial,usbkbd
+Out:   serial,vidconsole
+Err:   serial,vidconsole
+No working controllers found
+Net:   eth0: virtio-net#32
+starting USB...
+No working controllers found
+Hit any key to stop autoboot:  2  0 
+=> virtio scan; ext4ls virtio 0:0
+<DIR>       4096 .
+<DIR>       4096 ..
+<DIR>      16384 lost+found
+        24778958 fitImage
+        24778958 fitImage-tamper-kernel
+        24778800 fitImage-unsigned
+=> echo '=== Exp 4B-1: Boot UNSIGNED FIT image (expect REJECT) ==='
+=== Exp 4B-1: Boot UNSIGNED FIT image (expect REJECT) ===
+=> ext4load virtio 0:0 0x48000000 fitImage-unsigned && bootm 0x48000000#conf-1 - $fdtcontroladdr
+24778800 bytes read in 10 ms (2.3 GiB/s)
+## Loading kernel from FIT Image at 48000000 ...
+   Using 'conf-1' configuration
+   Verifying Hash Integrity ...  error!
+No 'signature' subnode found for '<NULL>' hash node in 'conf-1' config node
+Failed to verify required signature 'key-fit-dev'
+Bad Data Hash
+ERROR: can't get kernel image!
+=> echo '=== Exp 4B-2: Boot TAMPERED KERNEL (1 byte flipped) FIT image (expect REJECT) ==='
+=== Exp 4B-2: Boot TAMPERED KERNEL (1 byte flipped) FIT image (expect REJECT) ===
+=> ext4load virtio 0:0 0x48000000 fitImage-tamper-kernel && bootm 0x48000000#conf-1 - $fdtcontroladdr
+24778958 bytes read in 6 ms (3.8 GiB/s)
+## Loading kernel from FIT Image at 48000000 ...
+   Using 'conf-1' configuration
+   Verifying Hash Integrity ... sha256,rsa2048:fit-dev+ OK
+   Trying 'kernel-1' kernel subimage
+     Description:  Linux 6.6.160 ARM64 Kernel
+     Created:      2026-11-28   1:47:48 UTC
+     Type:         Kernel Image
+     Compression:  uncompressed
+     Data Start:   0x480000f4
+     Data Size:    24777216 Bytes = 23.6 MiB
+     Architecture: AArch64
+     OS:           Linux
+     Load Address: 0x40200000
+     Entry Point:  0x40200000
+     Hash algo:    sha256
+     Hash value:   6a0d34b43d442582db4ceb5650f4584340fda17a929d88d05ae0845007a39d75
+   Verifying Hash Integrity ... sha256 error!
+Bad hash value for 'hash-1' hash node in 'kernel-1' image node
+Bad Data Hash
+ERROR: can't get kernel image!
+=> echo '=== Exp 4B-3: Boot VALID SIGNED FIT image (expect RSA-2048 PASS -> Linux 6.6.160) ==='
+=== Exp 4B-3: Boot VALID SIGNED FIT image (expect RSA-2048 PASS -> Linux 6.6.160) ===
+=> setenv bootargs "root=/dev/vdb2 rw console=ttyAMA0,115200 swiotlb=0"
+=> ext4load virtio 0:0 0x48000000 fitImage && bootm 0x48000000#conf-1 - $fdtcontroladdr
+24778958 bytes read in 6 ms (3.8 GiB/s)
+## Loading kernel from FIT Image at 48000000 ...
+   Using 'conf-1' configuration
+   Verifying Hash Integrity ... sha256,rsa2048:fit-dev+ OK
+   Trying 'kernel-1' kernel subimage
+     Description:  Linux 6.6.160 ARM64 Kernel
+     Created:      2026-11-28   1:47:48 UTC
+     Type:         Kernel Image
+     Compression:  uncompressed
+     Data Start:   0x480000f4
+     Data Size:    24777216 Bytes = 23.6 MiB
+     Architecture: AArch64
+     OS:           Linux
+     Load Address: 0x40200000
+     Entry Point:  0x40200000
+     Hash algo:    sha256
+     Hash value:   6a0d34b43d442582db4ceb5650f4584340fda17a929d88d05ae0845007a39d75
+   Verifying Hash Integrity ... sha256+ OK
+## Flattened Device Tree blob at 40000000
+   Booting using the fdt blob at 0x40000000
+Working FDT set to 40000000
+   Loading Kernel Image
+   Loading Device Tree to 000000007d678000, end 000000007d67d46b ... OK
+Working FDT set to 7d678000
+
+Starting kernel ...
+
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x411fd070]
+[    0.000000] Linux version 6.6.160-yocto-standard (oe-user@oe-host) (aarch64-poky-linux-gcc (GCC) 13.5.0, GNU ld (GNU Binutils) 2.42.0.20240723) #1 SMP PREEMPT Tue Oct 27 16:23:00 UTC 2026
+[    0.000000] random: crng init done
+[    0.000000] Machine model: linux,dummy-virt
+[    0.000000] efi: UEFI not found.
+[    0.000000] OF: reserved mem: 0x000000000e100000..0x000000000effffff (15360 KiB) nomap non-reusable optee_core@e100000
+[    0.000000] OF: reserved mem: 0x0000000042000000..0x00000000421fffff (2048 KiB) nomap non-reusable optee_shm@42000000
+[    0.000000] Zone ranges:
+[    0.000000]   DMA      [mem 0x0000000040000000-0x000000007fffffff]
+[    0.000000]   DMA32    empty
+[    0.000000]   Normal   empty
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000040000000-0x0000000041ffffff]
+[    0.000000]   node   0: [mem 0x0000000042000000-0x00000000421fffff]
+[    0.000000]   node   0: [mem 0x0000000042200000-0x000000007fffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000040000000-0x000000007fffffff]
+[    0.000000] psci: probing for conduit method from DT.
+[    0.000000] psci: PSCIv1.1 detected in firmware.
+[    0.000000] psci: Using standard PSCI v0.2 function IDs
+[    0.000000] psci: Trusted OS migration not required
+[    0.000000] psci: SMC Calling Convention v1.4
+[    0.000000] percpu: Embedded 28 pages/cpu s74984 r8192 d31512 u114688
+[    0.000000] Detected PIPT I-cache on CPU0
+[    0.000000] CPU features: detected: Spectre-v2
+[    0.000000] CPU features: detected: Spectre-BHB
+[    0.000000] CPU features: detected: ARM erratum 1742098
+[    0.000000] CPU features: detected: ARM erratum 832075
+[    0.000000] CPU features: detected: ARM errata 1165522, 1319367, or 1530923
+[    0.000000] alternatives: applying boot alternatives
+[    0.000000] Kernel command line: root=/dev/vdb2 rw console=ttyAMA0,115200 swiotlb=0
+[    0.000000] Dentry cache hash table entries: 131072 (order: 8, 1048576 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 65536 (order: 7, 524288 bytes, linear)
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 258048
+[    0.000000] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+[    0.000000] software IO TLB: area num 4.
+[    0.000000] software IO TLB: SWIOTLB bounce buffer size roundup to 1MB
+[    0.000000] software IO TLB: mapped [mem 0x000000007e880000-0x000000007e980000] (1MB)
+[    0.000000] Memory: 997824K/1048576K available (13952K kernel code, 2052K rwdata, 3348K rodata, 4736K init, 580K bss, 50752K reserved, 0K cma-reserved)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=4, Nodes=1
+[    0.000000] ftrace: allocating 43257 entries in 170 pages
+[    0.000000] ftrace: allocated 170 pages with 4 groups
+[    0.000000] rcu: Preemptible hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU event tracing is enabled.
+[    0.000000] rcu: 	RCU restricting CPUs from NR_CPUS=256 to nr_cpu_ids=4.
+[    0.000000] 	Trampoline variant of Tasks RCU enabled.
+[    0.000000] 	Rude variant of Tasks RCU enabled.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=4
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] Root IRQ handler: gic_handle_irq
+[    0.000000] GICv2m: range[mem 0x08020000-0x08020fff], SPI[80:143]
+[    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.000000] arch_timer: cp15 timer(s) running at 62.50MHz (virt).
+[    0.000000] clocksource: arch_sys_counter: mask: 0x1ffffffffffffff max_cycles: 0x1cd42e208c, max_idle_ns: 881590405314 ns
+[    0.000062] sched_clock: 57 bits at 63MHz, resolution 16ns, wraps every 4398046511096ns
+[    0.004067] kfence: initialized - using 2097152 bytes for 255 objects at 0x(____ptrval____)-0x(____ptrval____)
+[    0.009200] Console: colour dummy device 80x25
+[    0.010097] Calibrating delay loop (skipped), value calculated using timer frequency.. 125.00 BogoMIPS (lpj=250000)
+[    0.010244] pid_max: default: 32768 minimum: 301
+[    0.011327] LSM: initializing lsm=capability,landlock,integrity
+[    0.011691] landlock: Up and running.
+[    0.013916] Mount-cache hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.013945] Mountpoint-cache hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.041692] RCU Tasks: Setting shift to 2 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=4.
+[    0.042080] RCU Tasks Rude: Setting shift to 2 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=4.
+[    0.042219] RCU Tasks Trace: Setting shift to 2 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=4.
+[    0.043135] rcu: Hierarchical SRCU implementation.
+[    0.043164] rcu: 	Max phase no-delay instances is 1000.
+[    0.046217] EFI services will not be available.
+[    0.047388] smp: Bringing up secondary CPUs ...
+[    0.051716] Detected PIPT I-cache on CPU1
+[    0.052386] CPU1: Booted secondary processor 0x0000000001 [0x411fd070]
+[    0.056646] Detected PIPT I-cache on CPU2
+[    0.056825] CPU2: Booted secondary processor 0x0000000002 [0x411fd070]
+[    0.058403] Detected PIPT I-cache on CPU3
+[    0.058591] CPU3: Booted secondary processor 0x0000000003 [0x411fd070]
+[    0.059321] smp: Brought up 1 node, 4 CPUs
+[    0.059355] SMP: Total of 4 processors activated.
+[    0.059422] CPU features: detected: 32-bit EL0 Support
+[    0.059467] CPU features: detected: CRC32 instructions
+[    0.061442] CPU: All CPU(s) started at EL1
+[    0.061469] alternatives: applying system-wide alternatives
+[    0.074994] devtmpfs: initialized
+[    0.081777] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.081877] futex hash table entries: 1024 (order: 4, 65536 bytes, linear)
+[    0.085046] DMI not present or invalid.
+[    0.090524] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.094050] DMA: preallocated 128 KiB GFP_KERNEL pool for atomic allocations
+[    0.094206] DMA: preallocated 128 KiB GFP_KERNEL|GFP_DMA pool for atomic allocations
+[    0.094273] DMA: preallocated 128 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+[    0.096555] thermal_sys: Registered thermal governor 'step_wise'
+[    0.097013] cpuidle: using governor ladder
+[    0.097556] hw-breakpoint: found 6 breakpoint and 4 watchpoint registers.
+[    0.098575] ASID allocator initialised with 65536 entries
+[    0.098914] Serial: AMBA PL011 UART driver
+[    0.115245] 9000000.pl011: ttyAMA0 at MMIO 0x9000000 (irq = 13, base_baud = 0) is a PL011 rev1
+[    0.116179] printk: console [ttyAMA0] enabled
+[    0.129539] Modules: 26560 pages in range for non-PLT usage
+[    0.129564] Modules: 518080 pages in range for PLT usage
+[    0.204892] raid6: neonx8   gen()  4852 MB/s
+[    0.274579] raid6: neonx4   gen()  4365 MB/s
+[    0.344097] raid6: neonx2   gen()  2943 MB/s
+[    0.412996] raid6: neonx1   gen()  1753 MB/s
+[    0.482586] raid6: int64x8  gen()  2652 MB/s
+[    0.551983] raid6: int64x4  gen()  3904 MB/s
+[    0.620444] raid6: int64x2  gen()  3446 MB/s
+[    0.688825] raid6: int64x1  gen()  2602 MB/s
+[    0.688953] raid6: using algorithm neonx8 gen() 4852 MB/s
+[    0.757336] raid6: .... xor() 2030 MB/s, rmw enabled
+[    0.757462] raid6: using neon recovery algorithm
+[    0.758334] ACPI: Interpreter disabled.
+[    0.759158] iommu: Default domain type: Translated
+[    0.759258] iommu: DMA domain TLB invalidation policy: strict mode
+[    0.760129] SCSI subsystem initialized
+[    0.760614] usbcore: registered new interface driver usbfs
+[    0.760853] usbcore: registered new interface driver hub
+[    0.760994] usbcore: registered new device driver usb
+[    0.761253] pps_core: LinuxPPS API ver. 1 registered
+[    0.761310] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.761499] PTP clock support registered
+[    0.770193] vgaarb: loaded
+[    0.771143] clocksource: Switched to clocksource arch_sys_counter
+[    0.775235] pnp: PnP ACPI: disabled
+[    0.791262] NET: Registered PF_INET protocol family
+[    0.792126] IP idents hash table entries: 16384 (order: 5, 131072 bytes, linear)
+[    0.797922] tcp_listen_portaddr_hash hash table entries: 512 (order: 1, 8192 bytes, linear)
+[    0.798124] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[    0.798274] TCP established hash table entries: 8192 (order: 4, 65536 bytes, linear)
+[    0.798608] TCP bind hash table entries: 8192 (order: 6, 262144 bytes, linear)
+[    0.799234] TCP: Hash tables configured (established 8192 bind 8192)
+[    0.800538] UDP hash table entries: 512 (order: 2, 16384 bytes, linear)
+[    0.800935] UDP-Lite hash table entries: 512 (order: 2, 16384 bytes, linear)
+[    0.802628] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    0.804814] RPC: Registered named UNIX socket transport module.
+[    0.804920] RPC: Registered udp transport module.
+[    0.804981] RPC: Registered tcp transport module.
+[    0.805034] RPC: Registered tcp-with-tls transport module.
+[    0.805095] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[    0.805259] PCI: CLS 0 bytes, default 64
+[    0.812691] workingset: timestamp_bits=46 max_order=18 bucket_order=0
+[    0.814751] NFS: Registering the id_resolver key type
+[    0.815840] Key type id_resolver registered
+[    0.815922] Key type id_legacy registered
+[    0.818140] Key type cifs.idmap registered
+[    0.850317] xor: measuring software checksum speed
+[    0.851176]    8regs           :  4620 MB/sec
+[    0.851763]    32regs          :  6610 MB/sec
+[    0.852625]    arm64_neon      :  4037 MB/sec
+[    0.852696] xor: using function: 32regs (6610 MB/sec)
+[    0.852924] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 248)
+[    0.853133] io scheduler mq-deadline registered
+[    0.853227] io scheduler kyber registered
+[    0.855545] pci-host-generic 4010000000.pcie: host bridge /pcie@10000000 ranges:
+[    0.856165] pci-host-generic 4010000000.pcie:       IO 0x003eff0000..0x003effffff -> 0x0000000000
+[    0.856562] pci-host-generic 4010000000.pcie:      MEM 0x0010000000..0x003efeffff -> 0x0010000000
+[    0.856688] pci-host-generic 4010000000.pcie:      MEM 0x8000000000..0xffffffffff -> 0x8000000000
+[    0.857126] pci-host-generic 4010000000.pcie: Memory resource size exceeds max for 32 bits
+[    0.857566] pci-host-generic 4010000000.pcie: ECAM at [mem 0x4010000000-0x401fffffff] for [bus 00-ff]
+[    0.858544] pci-host-generic 4010000000.pcie: PCI host bridge to bus 0000:00
+[    0.858796] pci_bus 0000:00: root bus resource [bus 00-ff]
+[    0.859224] pci_bus 0000:00: root bus resource [io  0x0000-0xffff]
+[    0.859342] pci_bus 0000:00: root bus resource [mem 0x10000000-0x3efeffff]
+[    0.859441] pci_bus 0000:00: root bus resource [mem 0x8000000000-0xffffffffff]
+[    0.860503] pci 0000:00:00.0: [1b36:0008] type 00 class 0x060000
+[    0.862830] pci 0000:00:01.0: [1af4:1000] type 00 class 0x020000
+[    0.864142] pci 0000:00:01.0: BAR 0 [io  0x1000-0x101f]
+[    0.865021] pci 0000:00:01.0: BAR 1 [mem 0x10000000-0x10000fff]
+[    0.867499] pci 0000:00:01.0: BAR 4 [mem 0x10004000-0x10007fff 64bit pref]
+[    0.868717] pci 0000:00:01.0: ROM [mem 0x10040000-0x1007ffff pref]
+[    0.869234] pci 0000:00:02.0: [1af4:1005] type 00 class 0x00ff00
+[    0.870776] pci 0000:00:02.0: BAR 0 [io  0x1020-0x103f]
+[    0.871449] pci 0000:00:02.0: BAR 1 [mem 0x10080000-0x10080fff]
+[    0.873710] pci 0000:00:02.0: BAR 4 [mem 0x10084000-0x10087fff 64bit pref]
+[    0.876149] pci 0000:00:01.0: ROM [mem 0x10000000-0x1003ffff pref]: assigned
+[    0.876385] pci 0000:00:01.0: BAR 4 [mem 0x8000000000-0x8000003fff 64bit pref]: assigned
+[    0.877079] pci 0000:00:02.0: BAR 4 [mem 0x8000004000-0x8000007fff 64bit pref]: assigned
+[    0.877842] pci 0000:00:01.0: BAR 1 [mem 0x10040000-0x10040fff]: assigned
+[    0.878292] pci 0000:00:02.0: BAR 1 [mem 0x10041000-0x10041fff]: assigned
+[    0.878685] pci 0000:00:01.0: BAR 0 [io  0x1000-0x101f]: assigned
+[    0.878797] pci 0000:00:02.0: BAR 0 [io  0x1020-0x103f]: assigned
+[    0.916950] brd: module loaded
+[    0.917548] virtio_blk virtio0: 1/0/0 default/read/poll queues
+[    0.922265] virtio_blk virtio0: [vda] 204800 512-byte logical blocks (105 MB/100 MiB)
+[    0.928944] virtio_blk virtio1: 1/0/0 default/read/poll queues
+[    0.929917] virtio_blk virtio1: [vdb] 563882 512-byte logical blocks (289 MB/275 MiB)
+[    0.934755]  vdb: vdb1 vdb2
+[    0.944701] rtc-pl031 9010000.pl031: registered as rtc0
+[    0.945109] rtc-pl031 9010000.pl031: setting system clock to 2026-11-28T01:52:48 UTC (1795830768)
+[    0.947079] device-mapper: ioctl: 4.48.0-ioctl (2023-03-01) initialised: dm-devel@redhat.com
+[    0.948113] SMCCC: SOC_ID: ARCH_SOC_ID not implemented, skipping ....
+[    0.949088] usbcore: registered new interface driver usbhid
+[    0.949156] usbhid: USB HID core driver
+[    0.951790] hw perfevents: enabled with armv8_pmuv3 PMU driver, 7 counters available
+[    0.952125] optee: probing for conduit method.
+[    0.952767] optee: revision 4.1 (18b424c2)
+[    0.954470] optee: Asynchronous notifications enabled
+[    0.954976] optee: dynamic shared memory is enabled
+[    0.963119] optee: initialized driver
+[    0.963779] u32 classifier
+[    0.963828]     input device check on
+[    0.963873]     Actions configured
+[    0.965368] NET: Registered PF_INET6 protocol family
+[    0.970442] Segment Routing with IPv6
+[    0.970596] In-situ OAM (IOAM) with IPv6
+[    0.971201] sit: IPv6, IPv4 and MPLS over IPv4 tunneling driver
+[    0.973060] NET: Registered PF_PACKET protocol family
+[    0.973553] Bridge firewalling registered
+[    0.974268] Key type dns_resolver registered
+[    0.974716] NET: Registered PF_VSOCK protocol family
+[    0.983669] registered taskstats version 1
+[    0.994331] Key type .fscrypt registered
+[    0.994420] Key type fscrypt-provisioning registered
+[    0.997669] Btrfs loaded, zoned=no, fsverity=no
+[    1.009317] Key type encrypted registered
+[    1.011494] printk: console [netcon0] enabled
+[    1.011604] netconsole: network logging started
+[    1.012505] clk: Disabling unused clocks
+[    1.015865] md: Waiting for all devices to be available before autodetect
+[    1.015947] md: If you don't use raid, use raid=noautodetect
+[    1.016062] md: Autodetecting RAID arrays.
+[    1.016134] md: autorun ...
+[    1.016184] md: ... autorun DONE.
+[    1.107621] EXT4-fs (vdb2): mounted filesystem 6da463be-099f-4337-9c44-36cbcb9180c9 r/w with ordered data mode. Quota mode: disabled.
+[    1.108181] VFS: Mounted root (ext4 filesystem) on device 253:18.
+[    1.109863] devtmpfs: mounted
+[    1.152588] Freeing unused kernel memory: 4736K
+[    1.153071] Run /sbin/init as init process
+INIT: version 3.04 booting
+Framebuffer /dev/fb0 not detected
+Boot splashscreen disabled
+[    1.523405] /dev/vda1: Can't lookup blockdev
+Starting udev
+[    1.872622] udevd[124]: starting version 3.2.14
+[    1.913340] udevd[125]: starting eudev-3.2.14
+[    2.250402] EXT4-fs (vdb2): re-mounted 6da463be-099f-4337-9c44-36cbcb9180c9.
+ALSA: Restoring mixer settings...
+INIT: Entering runlevel: 5
+Configuring network interfaces... done.
+Starting system message bus: dbus.
+Starting OP-TEE Supplicant: tee-supplicant.
+Starting rpcbind daemon...done.
+Starting bluetooth: bluetoothd.
+Starting syslogd/klogd: done
+ * Starting Avahi mDNS/DNS-SD Daemon: avahi-daemon
+   ...done.
+
+Poky (Yocto Project Reference Distro) 5.0.21 qemuarm64-secureboot /dev/ttyAMA0
+
+qemuarm64-secureboot login: root
+
+WARNING: Poky is a reference Yocto Project distribution that should be used for
+testing and development purposes only. It is recommended that you create your
+own distribution for production use.
+
+7[r[999;999H[6nroot@qemuarm64-secureboot:~# uname -a; optee_example_hello_world
+Linux qemuarm64-secureboot 6.6.160-yocto-standard #1 SMP PREEMPT Tue Oct 27 16:23:00 UTC 2026 aarch64 GNU/Linux
+Invoking TA to increment 42
+TA incremented value to 43
+root@qemuarm64-secureboot:~# poweroff
+
+Broadcast message from root@qemuarm64-secureboot (ttyAMA0) (Sat Nov 28 01:52:56 2026):
+
+The system is going down for system halt NOW!
+INIT: Switching to runlevel: 0
+root@qemuarm64-secureboot:~# INIT: Sending processes configured via /etc/inittab the TERM signal
+ * Stopping Avahi mDNS/DNS-SD Daemon: avahi-daemon
+   ...done.
+Stopping bluetooth: bluetoothd.
+Stopping system message bus: dbus.
+Framebuffer /dev/fb0 not detected
+Boot splashscreen disabled
+Stopping syslogd/klogd: stopped syslogd (pid 322)
+stopped klogd (pid 325)
+done
+ALSA: Storing mixer settings...
+Unmounting remote filesystems...
+Stopping rpcbind daemon...
+done.
+Deconfiguring network interfaces... done.
+Stopping OP-TEE Supplicant: tee-supplicant.
+Sending all processes the TERM signal...
+Sending all processes the KILL signal...
+Deactivating swap...
+Unmounting local filesystems...
+[   16.008295] EXT4-fs (vdb2): re-mounted 6da463be-099f-4337-9c44-36cbcb9180c9 ro.
+[   16.144152] tpm tpm0: ftpm_tee_tpm_op_send: SUBMIT_COMMAND invoke error: 0xffff3024
+[   16.144381] tpm tpm0: tpm_try_transmit: send(): error -53212
+[   16.145296] reboot: Power down
+INFO:    PSCI Power Domain Map:
+INFO:      Domain Node : Level 1, parent_node 4294967295, State ON (0x0)
+INFO:      Domain Node : Level 1, parent_node 4294967295, State OFF (0x2)
+INFO:      CPU Node : MPID 0x0, parent_node 0, State ON (0x0)
+INFO:      CPU Node : MPID 0x1, parent_node 0, State ON (0x0)
+INFO:      CPU Node : MPID 0x2, parent_node 0, State ON (0x0)
+INFO:      CPU Node : MPID 0x3, parent_node 0, State ON (0x0)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 0, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 0, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 0, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 0, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 0, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 0, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 0, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 0, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 0, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 0, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 0, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 0, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 1, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 1, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 1, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 1, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 1, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 1, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 1, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 1, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 1, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 1, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 1, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 1, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 1, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 1, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 1, State OFF (0x2)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 1, State OFF (0x2)
+ERROR:   QEMU System Power off: with GPIO.

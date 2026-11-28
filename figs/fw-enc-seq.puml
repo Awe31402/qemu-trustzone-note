@@ -1,0 +1,58 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam dpi 150
+skinparam shadowing false
+skinparam roundcorner 6
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #1E293B
+skinparam ParticipantBackgroundColor #F8FAFC
+skinparam ParticipantBorderColor #334155
+
+title TF-A BL2 載入加密 BL31 (id=3)：AEAD 解密與 TBBR 明文驗簽時序圖
+
+participant "BL2\nbl2_load_images()" as BL2 #DBEAFE
+participant "bl_common\nload_auth_image_recursive()" as BLC #E0E7FF
+participant "qemu_io_storage\nplat_get_image_source()" as PLAT #FEF3C7
+participant "io_encrypted\nenc_file_read()" as IOENC #DCFCE7
+participant "plat_bl_common\nplat_get_enc_key_info()" as KEY #FEE2E2
+participant "mbedTLS\naes_gcm_decrypt()" as GCM #F3E8FF
+participant "auth_mod\nauth_mod_verify_img()" as AUTH #FFE4E6
+
+BL2 -> BLC : load_auth_image(BL31_IMAGE_ID = 3)
+BLC -> BLC : 遞迴驗證父憑證\nid=7 → id=9 → id=13（皆明文 X.509）\n萃取出明文 BL31 預期 SHA-256
+
+BLC -> PLAT : load_image(id=3) → plat_get_image_source(3)
+PLAT --> BLC : 回傳 enc_dev_handle + bl31_uuid_spec\n(ENCRYPT_BL31=1 切換至此策略)
+
+BLC -> IOENC : io_size() → enc_file_len()
+IOENC --> BLC : fip_len - sizeof(fw_enc_hdr)（扣除 44B 標頭）
+
+BLC -> IOENC : io_read(dst=0x0e0a0000, len) → enc_file_read()
+IOENC -> IOENC : 1) io_read() 讀前 44B fw_enc_hdr\n2) 檢查 magic == 0xAA640001
+alt magic 遭竄改
+  IOENC --> BLC : WARN "Encryption header check failed." → -ENOENT (-2)
+end
+
+IOENC -> IOENC : 3) io_read() 將密文讀入 Secure SRAM 0x0e0a0000
+IOENC -> KEY : 4) plat_get_enc_key_info(fw_enc_status=SSK, uuid)
+KEY --> IOENC : 回傳 256-bit 對稱金鑰（量產應來自硬體 OTP/HUK）
+
+IOENC -> GCM : 5) crypto_mod_auth_decrypt(AES-GCM, 0x0e0a0000, iv, tag)
+GCM -> GCM : 分塊 128B 原地解密並計算預期 Tag\n常數時間逐位元組比對 header.tag
+IOENC -> IOENC : 6) memset(key, 0, key_len) 立即清除堆疊金鑰
+
+alt 密文或 Tag 被竄改（1 bit 錯誤）
+  GCM --> IOENC : CRYPTO_ERR_DECRYPTION (4)
+  IOENC --> BLC : ERROR "File decryption failed (4)" → -ENOENT (-2)
+  BLC --> BL2 : WARNING "Failed to load image id=3 (-2)" → 停機
+else AEAD 驗證通過（0x0e0a0000 現為明文 BL31）
+  GCM --> IOENC : CRYPTO_SUCCESS (0)
+  IOENC --> BLC : return 0
+  BLC -> AUTH : 7) auth_mod_verify_img(3, 0x0e0a0000, len)
+  AUTH -> AUTH : 計算明文 SHA-256 比對 id=13 憑證雜湊
+  AUTH --> BLC : 0 (PASS)
+  BLC --> BL2 : 載入並驗簽完成，準備交棒 BL31
+end
+
+@enduml

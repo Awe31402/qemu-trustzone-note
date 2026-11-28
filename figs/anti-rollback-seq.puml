@@ -1,0 +1,45 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam dpi 150
+skinparam shadowing false
+skinparam roundcorner 6
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #1E293B
+skinparam ParticipantBackgroundColor #F8FAFC
+skinparam ParticipantBorderColor #334155
+
+title TF-A BL1 / BL2 防降級驗證與 OTP 單調升級時序圖（四組實測路徑）
+
+participant "BL1 / BL2\nload_auth_image_recursive()" as BL #DBEAFE
+participant "auth_mod\nauth_mod_verify_img()" as AUTH #FEF3C7
+participant "auth_nvctr()\n(auth_mod.c:315)" as NV #E0E7FF
+participant "qemu_trusted_boot.c\nplat_get/set_nv_ctr()" as OTP #DCFCE7
+
+BL -> AUTH : auth_mod_verify_img(cert_id, ptr, len)
+AUTH -> AUTH : [0] AUTH_METHOD_SIG：驗證 X.509 RSA-PSS 簽章\n→ 舊版 v0 憑證簽章「完全合法」！(sig_auth_done = true)
+
+AUTH -> NV : [1] AUTH_METHOD_NV_CTR
+NV -> NV : 解析 X.509 Extension (OID .2100.1 或 .2100.2)\n取得 DER ASN.1 INTEGER → cert_nv_ctr
+NV -> OTP : plat_get_nv_ctr(oid_cookie, &plat_nv_ctr)
+OTP --> NV : 回傳硬體 OTP 計數器值 (本實驗 = 2)
+
+alt Exp 3B / 3C：降級攻擊（cert_nv_ctr = 0 < plat_nv_ctr = 2）
+  NV --> AUTH : return 1（版本過低，拒絕載入！）
+  AUTH --> BL : 非零錯誤 → zero_normalmem() 清零記憶體\n→ 回傳 -EAUTH (-80)
+  note over BL #FECACA
+    • Exp 3B (v0 全體降級)：BL1 攔截 id=6 → Failed to load BL2 firmware
+    • Exp 3C (僅 BL33 降級)：BL2 攔截 id=11 → Failed to load image id 5 (-80)
+  end note
+else Exp 3A：版本相符（cert_nv_ctr = 2 == plat_nv_ctr = 2）
+  NV --> AUTH : return 0（need_nv_ctr_upgrade = false）
+  AUTH --> BL : 驗證通過，繼續載入後續映像 → U-Boot 2024.01
+else Exp 3D：合法新版本升級（cert_nv_ctr = 3 > plat_nv_ctr = 2）
+  NV --> AUTH : return 0（need_nv_ctr_upgrade = true）
+  AUTH -> OTP : 確認 sig_auth_done == true 後\n呼叫 plat_set_nv_ctr2(oid_cookie, cert_nv_ctr = 3)
+  OTP -> OTP : NOTICE: [OTP-SIM] Fusing NV counter: 2 -> 3\n（真實 SoC 在此永久燒斷 eFuse 位元）
+  OTP --> AUTH : return 0
+  AUTH --> BL : 升級並驗證通過 → 舊版 v0/v2 自此永久失效
+end
+
+@enduml

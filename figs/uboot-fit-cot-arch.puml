@@ -1,0 +1,44 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam dpi 150
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+skinparam ArrowColor #1E293B
+skinparam ArrowFontColor #0F172A
+skinparam ArrowFontSize 11
+
+title 延伸信任鏈全景：從 TF-A BL1 一路串接到 U-Boot Signed FIT、Linux Kernel 與 dm-verity
+
+package "EL3 / Secure World（TF-A TBBR + AES-GCM）" #EFF6FF {
+  rectangle "BL1 (BootROM) + ROTPK Hash\n驗證 BL2 (id=6 → id=1)" as BL1 #DBEAFE
+  rectangle "BL2 (Secure EL1)\n• 解密並驗簽 BL31 / OP-TEE\n• 驗證 U-Boot BL33 (id=11 → id=15 → id=5)\n  涵蓋整個 u-boot.bin（含內嵌公鑰 DTB）" as BL2 #BFDBFE
+}
+
+package "Non-Secure Bootloader（U-Boot 2024.01，BL33）" #FEFCE8 {
+  rectangle "u-boot.bin（.dtb.init.rodata）\nCONFIG_OF_EMBED=y + EXT_DTB=fit-pubkey.dtb\n內嵌 /signature/key-fit-dev（RSA-2048）\nrequired = 'conf'（不可被外部 DTB 繞過）" as UBPK #FEF08A
+  rectangle "boot/image-fit-sig.c\nfit_config_verify() → fit_config_verify_required_keys()\n1) 以 RSA-2048 驗證 conf-1 簽章\n2) 以 SHA-256 驗證 kernel-1 映像本體" as UBV #FDE047
+}
+
+package "Linux 與 RootFS 層（Normal World）" #ECFDF5 {
+  rectangle "Signed FIT Image (fitImage)\n• /images/kernel-1（Linux 6.6.160 + SHA-256）\n• /configurations/conf-1（RSA-2048 簽章）\n  鎖定 kernel 與配置，防 Mix-and-Match 攻擊" as FIT #DCFCE7
+  rectangle "Linux 6.6.160 Kernel\n由 U-Boot 驗簽通過後啟動\n（可接續 dm-verity 唯讀 RootFS 雜湊樹）" as LINUX #BBF7D0
+  rectangle "dm-verity（延伸防線）\nRoot Hash 寫入已簽章 bootargs / initramfs\n逐 4KB Block 即時驗證 RootFS 唯讀完整性" as DMV #E2E8F0
+}
+
+BL1 --> BL2 : "ROTPK 驗簽"
+BL2 --> UBPK : "TBBR SHA-256 鎖死 u-boot.bin"
+UBPK --> UBV : "dtb_dt_embedded()"
+FIT --> UBV : "ext4load + bootm"
+UBV --> LINUX : "sha256,rsa2048:fit-dev+ OK\nsha256+ OK"
+LINUX ..> DMV : "Kernel cmdline Root Hash"
+
+legend bottom
+  <b>QEMU ARM64 實作關鍵（為什麼不直接信任 QEMU 產生的 DTB？）</b>
+  • QEMU virt 預設以 CONFIG_OF_BOARD=y 在 0x40000000 注入動態 DTB，但該 DTB 不在 TF-A BL2 的驗簽範圍內
+  • 本實作將 fit-pubkey.dtb 經 CONFIG_OF_EMBED=y 編進 u-boot.bin 的 .dtb.init.rodata，使其直接受 TF-A BL2 TBBR 保護
+  • 竄改 FIT 公鑰會觸發 BL2 -EAUTH (-80)；竄改 Kernel 或使用未簽章 FIT 則被 U-Boot 當場拒載
+endlegend
+
+@enduml

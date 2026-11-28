@@ -1,0 +1,44 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam dpi 150
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+skinparam ArrowColor #1E293B
+skinparam ArrowFontColor #0F172A
+skinparam ArrowFontSize 11
+
+title OP-TEE 4.1.0 加密 TA（CFG_ENCRYPT_TA=y）二進位格式與金鑰衍生架構
+
+package "加密 .ta 檔案磁碟結構（/lib/optee_armtz/<UUID>.ta）" #FEFCE8 {
+  rectangle "1. struct shdr（20B + 32B SHA-256 + 256B RSA-PSS 簽章 = 308B）\nmagic = 0x4F545348 ('OTSH')  |  img_type = 2 (SHDR_ENCRYPTED_TA)\nalgo = 0x70414930 (RSASSA-PKCS1-PSS-MGF1-SHA256)" as SHDR #FEF08A
+  rectangle "2. struct shdr_bootstrap_ta（20B）\nuuid[16]  |  ta_version (4B，防 TA 降級)" as BSHDR #FDE047
+  rectangle "3. struct shdr_encrypted_ta（12B + 12B IV + 16B Tag = 40B）\nenc_algo = 0x40000810 (TEE_ALG_AES_GCM)\nflags = 0 (DEV_SPECIFIC) / 1 (CLASS_WIDE)\niv[12]（每次 sign_encrypt.py 隨機產生） | tag[16]" as EHDR #FACC15
+  rectangle "4. AES-256-GCM 密文 Payload（高熵 ~7.999 bits/byte）\n原始 .stripped.elf 完全加密，無 7f 45 4c 46 (ELF) 魔術數\nLinux root 直接 dump 亦無法 strings / Ghidra 反組譯" as PAYLOAD #FCA5A5
+}
+
+package "Secure World（OP-TEE OS Core）金鑰衍生鏈" #ECFDF5 {
+  rectangle "晶片硬體信任根（OTP / eFuse）\ntee_otp_get_hw_unique_key()\n128-bit HUK（QEMU stub 為 16B 0x00）" as HUK #BBF7D0
+  rectangle "core/kernel/otp_stubs.c\ntee_otp_get_ta_enc_key()\n傳入 HUK_SUBKEY_TA_ENC (4)\n+ ta_pub_key_modulus (256B)" as OTP #86EFAC
+  rectangle "core/kernel/huk_subkey.c\n__huk_subkey_derive()\nHMAC-SHA256(HUK, 0x04000000 || RSA_N)\n→ 256-bit TA_ENC_KEY" as KDF #4ADE80
+  rectangle "core/tee/tee_ta_enc_manager.c\nAES-256-GCM 串流解密\n解密完 memzero_explicit(key)" as DEC #DCFCE7
+}
+
+SHDR -[hidden]down-> BSHDR
+BSHDR -[hidden]down-> EHDR
+EHDR -[hidden]down-> PAYLOAD
+
+HUK --> OTP : "HUK"
+OTP --> KDF : "usage=4 + 公鑰 N"
+KDF --> DEC : "256-bit TA_ENC_KEY"
+EHDR --> DEC : "IV + Tag"
+PAYLOAD --> DEC : "經 tee-supplicant 載入共享記憶體"
+
+legend bottom
+  <b>Sign-and-Encrypt 雙重防護</b>
+  • shdr.hash 涵蓋：shdr || bs_hdr || ehdr || iv || tag ||「明文 ELF」→ 簽章同時鎖定加密標頭與解密後明文
+  • 即使 Linux 淪陷取得 root 權限，/lib/optee_armtz/*.ta 仍為隨機高熵密文；竄改任 1 byte 立即回傳 TEEC_ERROR_SECURITY (0xffff000f)
+endlegend
+
+@enduml

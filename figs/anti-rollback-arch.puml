@@ -1,0 +1,44 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam dpi 150
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+skinparam ArrowColor #1E293B
+skinparam ArrowFontColor #0F172A
+skinparam ArrowFontSize 11
+
+title TF-A v2.10.4 防降級架構：雙軌 OTP 單調計數器（Trusted vs Non-Trusted NV Counter）
+
+package "TBBR X.509 憑證（編譯期 cert_create 寫入關鍵擴充欄位）" #EFF6FF {
+  rectangle "Trusted World 憑證鏈\nid=6 (TB_FW_CERT)\nid=7 (TRUSTED_KEY_CERT)\nid=9/13 (BL31)  |  id=10/14 (OP-TEE)\nOID: 1.3.6.1.4.1.4128.2100.1\n(--tfw-nvctr = TFW_NVCTR_VAL)" as TFW_CERT #DBEAFE
+  rectangle "Non-Trusted World 憑證鏈\nid=11 (NT_FW_KEY_CERT)\nid=15 (NT_FW_CONTENT_CERT)\n保護 BL33 (U-Boot)\nOID: 1.3.6.1.4.1.4128.2100.2\n(--ntfw-nvctr = NTFW_NVCTR_VAL)" as NTFW_CERT #E0E7FF
+}
+
+package "TF-A 驗證核心（drivers/auth/auth_mod.c）" #FEFCE8 {
+  rectangle "auth_nvctr()（auth_mod.c:315-397）\n1. 解析憑證 DER ASN.1 INTEGER → cert_nv_ctr\n2. 依 OID cookie 呼叫 plat_get_nv_ctr() → plat_nv_ctr\n3. 三向判定：\n   • cert < plat → 回傳 1 → -EAUTH (-80) 立即攔截！\n   • cert == plat → 直接放行\n   • cert > plat → 標記 need_nv_ctr_upgrade = true" as AUTHNV #FEF08A
+  rectangle "auth_mod_verify_img()（auth_mod.c:519-527）\n★ 必須確認 RSA 簽章驗證通過 (sig_auth_done)\n才呼叫 plat_set_nv_ctr2() 永久燒斷 OTP！" as UPGRADE #FDE047
+}
+
+package "硬體 OTP / eFuse 單調遞增計數器（只能 0 → 1 不可逆）" #ECFDF5 {
+  rectangle "Trusted NV Counter (OTP)\n本實驗模擬值：QEMU_SIM_TFW_NVCTR = 2\n[0b0000_0011]（不可回退至 0 或 1）" as OTP_TFW #BBF7D0
+  rectangle "Non-Trusted NV Counter (OTP)\n本實驗模擬值：QEMU_SIM_NTFW_NVCTR = 2\n[0b0000_0011]（獨立管理，允許 BL33 各自升級）" as OTP_NTFW #86EFAC
+}
+
+TFW_CERT --> AUTHNV : "cookie = TRUSTED_FW_NVCOUNTER_OID"
+NTFW_CERT --> AUTHNV : "cookie = NON_TRUSTED_FW_NVCOUNTER_OID"
+AUTHNV <--> OTP_TFW : "plat_get_nv_ctr()"
+AUTHNV <--> OTP_NTFW : "plat_get_nv_ctr()"
+AUTHNV --> UPGRADE : "cert > plat"
+UPGRADE --> OTP_TFW : "plat_set_nv_ctr() (2 → 3)"
+UPGRADE --> OTP_NTFW : "plat_set_nv_ctr() (2 → 3)"
+
+legend bottom
+  <b>為什麼防降級是防逆向的關鍵拼圖？</b>
+  • 攻擊者手上的舊版 v0 fip.bin 擁有「合法的原廠 ROTPK 簽章」，單靠驗簽無法阻擋刷回舊版
+  • 若舊版 Bootloader/OP-TEE 曾有記憶體洩漏或提權漏洞，攻擊者即可降級後 dump 解密明文
+  • 拆成 TFW 與 NTFW 兩組獨立計數器，可讓 U-Boot/Linux 安全修補與 BL2/OP-TEE 版本獨立推進
+endlegend
+
+@enduml

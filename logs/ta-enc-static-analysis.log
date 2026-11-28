@@ -1,0 +1,55 @@
+=== [Track 2] OP-TEE Encrypted TA (CFG_ENCRYPT_TA=y) Static Analysis ===
+Date: 2026-11-28T09:35:22+08:00
+
+--- 1. Parse SHDR + SHDR_BOOTSTRAP_TA + SHDR_ENCRYPTED_TA & Entropy ---
+File: fd02c9da-306c-48c7-a49c-bbd827ae86ee.ta (total=424208 bytes)
+  shdr: magic=0x4f545348 img_type=2 (2=SHDR_ENCRYPTED_TA) img_size=423840 algo=0x70414930 hash_len=32 sig_len=256
+  shdr_bootstrap_ta: uuid=fd02c9da306c48c7a49cbbd827ae86ee ta_version=0
+  shdr_encrypted_ta: enc_algo=0x40000810 (TEE_ALG_AES_GCM) flags=0 (0=DEV_SPECIFIC) iv_size=12 tag_size=16
+    iv =9304bd7bcae13dc6bcd10ae1
+    tag=edbb388af939d1df9ea6c4ccae159eac
+  payload_offset=0x170 payload_size=423840 payload_entropy=7.9996 bits/byte
+  ELF magic (7f 45 4c 46): NOT FOUND (encrypted!)
+
+File: 8aaaf200-2450-11e4-abe2-0002a5d5c51b.ta (total=113864 bytes)
+  shdr: magic=0x4f545348 img_type=2 (2=SHDR_ENCRYPTED_TA) img_size=113496 algo=0x70414930 hash_len=32 sig_len=256
+  shdr_bootstrap_ta: uuid=8aaaf200245011e4abe20002a5d5c51b ta_version=0
+  shdr_encrypted_ta: enc_algo=0x40000810 (TEE_ALG_AES_GCM) flags=0 (0=DEV_SPECIFIC) iv_size=12 tag_size=16
+    iv =c7b3bb714ce0095ca043e6d0
+    tag=1c766467784b6edb2ba585225afcc7b1
+  payload_offset=0x170 payload_size=113496 payload_entropy=7.9982 bits/byte
+  ELF magic (7f 45 4c 46): NOT FOUND (encrypted!)
+
+--- 2. OP-TEE Official Tool (sign_encrypt.py display) ---
+Encrypted TA
+ struct shdr
+  magic:      0x4f545348
+  img_type:   2 (SHDR_ENCRYPTED_TA)
+  img_size:   423840 bytes
+  algo:       0x70414930 (TEE_ALG_RSASSA_PKCS1_PSS_MGF1_SHA256)
+  hash_size:  32 bytes
+  sig_size:   256 bytes
+  hash:       f318f6e2ba2ba0253cba189798cd03a6b41511f6b0c51a963d2e04059d08b80d
+ struct shdr_bootstrap_ta
+  uuid:       fd02c9da-306c-48c7-a49c-bbd827ae86ee
+  ta_version: 0
+ struct shdr_encrypted_ta
+  enc_algo:   0x40000810 (TEE_ALG_AES_GCM)
+  flags:      0x0 (SHDR_ENC_KEY_DEV_SPECIFIC)
+  iv_size:    12 (bytes)
+  iv:         9304bd7bcae13dc6bcd10ae1
+  tag_size:   16 (bytes)
+  tag:        619aabcb9f7935c7027cc98897bf1c7a
+ TA offset:  352 (0x160) bytes
+ TA size:    423840 (0x677a0) bytes
+
+--- 3. Strings Check on Encrypted pkcs11 TA (vs Baseline) ---
+--- 4. Strings Check on Encrypted hello_world TA ---
+
+--- 5. Mathematical Proof: HUK -> HUK_SUBKEY_TA_ENC -> TA_ENC_KEY ---
+HUK (QEMU stub)  = 00000000000000000000000000000000
+usage (LE u32)   = 04000000 (HUK_SUBKEY_TA_ENC = 4)
+const_data       = ta_pub_key_modulus (256 bytes, RSA-2048)
+HMAC-SHA256 out  = b64d239b1f3c7d3b06506229cd8ff7c8af2bb4db2168621ac62c84948468c4f4
+ta/link.mk key   = b64d239b1f3c7d3b06506229cd8ff7c8af2bb4db2168621ac62c84948468c4f4
+Exact match      = True

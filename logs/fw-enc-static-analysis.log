@@ -1,0 +1,70 @@
+=== [Track 1] TF-A Firmware Encryption (AES-256-GCM) Static Analysis ===
+Date: 2026-11-28T09:29:19+08:00
+
+--- 1. FIP Table of Contents (Encrypted BL31 & BL32) ---
+Trusted Boot Firmware BL2: offset=0x268, size=0x145D1, cmdline="--tb-fw"
+EL3 Runtime Firmware BL31: offset=0x14839, size=0xD098, cmdline="--soc-fw"
+Secure Payload BL32 (Trusted OS): offset=0x218D1, size=0x48, cmdline="--tos-fw"
+Secure Payload BL32 Extra1 (Trusted OS Extra1): offset=0x21919, size=0xB0374, cmdline="--tos-fw-extra1"
+Secure Payload BL32 Extra2 (Trusted OS Extra2): offset=0xD1C8D, size=0x2C, cmdline="--tos-fw-extra2"
+Non-Trusted Firmware BL33: offset=0xD1CB9, size=0xFFDD8, cmdline="--nt-fw"
+Trusted key certificate: offset=0x1D1A91, size=0x616, cmdline="--trusted-key-cert"
+SoC Firmware key certificate: offset=0x1D20A7, size=0x4E2, cmdline="--soc-fw-key-cert"
+Trusted OS Firmware key certificate: offset=0x1D2589, size=0x4F0, cmdline="--tos-fw-key-cert"
+Non-Trusted Firmware key certificate: offset=0x1D2A79, size=0x4F2, cmdline="--nt-fw-key-cert"
+Trusted Boot Firmware BL2 certificate: offset=0x1D2F6B, size=0x4BE, cmdline="--tb-fw-cert"
+SoC Firmware content certificate: offset=0x1D3429, size=0x438, cmdline="--soc-fw-cert"
+Trusted OS Firmware content certificate: offset=0x1D3861, size=0x4D6, cmdline="--tos-fw-cert"
+Non-Trusted Firmware content certificate: offset=0x1D3D37, size=0x448, cmdline="--nt-fw-cert"
+
+--- 2. Parse struct fw_enc_hdr (44 bytes) & Shannon Entropy ---
+tb-fw.bin            size=   83409 (delta=+8192)  entropy=5.9811 bits/byte
+soc-fw.bin           size=   53400 (delta=+44)  entropy=7.9969 bits/byte
+   -> [ENCRYPTED] fw_enc_hdr: magic=0xaa640001 algo=0(AES-GCM) flags=0(SSK) iv_len=12 tag_len=16
+      iv=1234567890abcdef12345678  tag=0274ce68f4936b00feb14600027cfee1
+tos-fw.bin           size=      72 (delta=+44)  entropy=5.2871 bits/byte
+   -> [ENCRYPTED] fw_enc_hdr: magic=0xaa640001 algo=0(AES-GCM) flags=0(SSK) iv_len=12 tag_len=16
+      iv=1234567890abcdef12345678  tag=9c20bd953c03eb38feeb4b3caa395b9a
+tos-fw-extra1.bin    size=  721780 (delta=+44)  entropy=7.9997 bits/byte
+   -> [ENCRYPTED] fw_enc_hdr: magic=0xaa640001 algo=0(AES-GCM) flags=0(SSK) iv_len=12 tag_len=16
+      iv=1234567890abcdef12345678  tag=2c75b7b7fad4aa445315f8633b29c69c
+nt-fw.bin            size= 1048024 (delta=+0)  entropy=5.9480 bits/byte
+
+--- 3. Strings Check on Encrypted BL31 & BL32 ---
+BL31 (soc-fw.bin) matches for BL31|PSCI|OPTEED|Trusted:
+BL32 (tos-fw-extra1.bin) matches for OP-TEE|tee_ta_|/usr/src:
+
+--- 4. Disassembly Check on Encrypted BL31 Payload (skip 44-byte fw_enc_hdr) ---
+       0:	d839246a 	prfm	plil2keep, 0x7248c
+       4:	fe9423b7 	.inst	0xfe9423b7 ; undefined
+       8:	3b86a826 	.inst	0x3b86a826 ; undefined
+       c:	2220eb1e 	.inst	0x2220eb1e ; undefined
+      10:	485f983a 	ldaxrh	w26, [x1]
+      14:	4628e779 	.inst	0x4628e779 ; undefined
+      18:	b9f05746 	.inst	0xb9f05746 ; undefined
+      1c:	a1284fe2 	.inst	0xa1284fe2 ; undefined
+      20:	9632798c 	bl	0xfffffffff8c9e650
+      24:	0f44df2c 	.inst	0x0f44df2c ; undefined
+      28:	39f3e405 	ldrsb	w5, [x0, #3321]
+      2c:	ffce0833 	.inst	0xffce0833 ; undefined
+      30:	c9bc5ad0 	.inst	0xc9bc5ad0 ; undefined
+
+--- 5. Verify TBBR Content Cert Hash matches PLAINTEXT bl31.bin (NOT ciphertext) ---
+SHA-256 of plaintext bl31.bin:          780596cce9ee8a3d251f9910ee8e8ff161def308f9c25f329fa51a010a67270d
+SHA-256 of encrypted soc-fw.bin (FIP):  cb2872978df514db58738e1bf7ac640def26d982d0129167f1dacc29bf16111d
+SHA-256 inside soc-fw-cert.bin (OID 1.3.6.1.4.1.4128.2100.601):
+        ef:83:95:0b:da:70:09:76:9e:a8:a9:ce:ed:02:d2:89:cb:e3:
+        7f:55:5d:ae:e5:3e:9e:1a:94:82:73:c6:14:72:15:91:be:6f:
+        a6:46:25:f5:34:0a:78:83:37:b4:6c:ce:23:f6:81:c1:0f:1e:
+        55:2b:08:14:e0:2b:48:f6:58:a0:65:5b:d1:02:1c:26:a5:07:
+        36:b7:64:09:64:03:4d:8c:a1:3c:ad:9f:a8:e3:bd:46:c3:ab:
+        b8:e3:d1:0e:f3:98:fa:9a:ca:f4:61:75:f0:ca:18:04:48:92:
+        e7:69:67:1e:b9:ae:92:5b:eb:79:30:15:d1:94:49:51:01:e7:
+        39:7b:75:68:20:db:8c:d3:da:62:d9:b4:f9:c5:19:75:69:15:
+        ae:59:ed:a7:bf:b5:de:db:ab:81:61:42:8f:37:60:bb:8c:0c:
+        f9:d0:d6:02:b7:6a:ec:48:8a:c6:dd:b9:31:7b:d1:27:d4:ac:
+        c9:35:88:74:ad:30:ab:0f:12:9e:85:37:7e:72:c4:a0:78:98:
+        8b:21:28:54
+
+--- 5b. Exact SHA-256 OCTET STRING extracted via asn1parse (OID 1.3.6.1.4.1.4128.2100.603) ---
+   17:d=1  hl=2 l=  32 prim: OCTET STRING      [HEX DUMP]:780596CCE9EE8A3D251F9910EE8E8FF161DEF308F9C25F329FA51A010A67270D

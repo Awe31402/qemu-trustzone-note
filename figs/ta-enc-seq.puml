@@ -1,0 +1,59 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam dpi 150
+skinparam shadowing false
+skinparam roundcorner 6
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #1E293B
+skinparam ParticipantBackgroundColor #F8FAFC
+skinparam ParticipantBorderColor #334155
+
+title OP-TEE 4.1.0 載入加密 User TA：跨世界 RPC、金鑰衍生與串流 AEAD 解密時序圖
+
+participant "Linux CA\noptee_example_hello_world" as CA #DBEAFE
+participant "Linux Daemon\ntee-supplicant" as SUPP #E0E7FF
+participant "OP-TEE Core\nree_fs_ta.c" as REE #DCFCE7
+participant "TA Enc Mgr\ntee_ta_enc_manager.c" as ENC #FEF3C7
+participant "HUK / OTP\nhuk_subkey.c" as HUK #FEE2E2
+participant "ldelf (S-EL0)\nELF 載入器" as LDELF #F3E8FF
+
+CA -> REE : TEEC_OpenSession(UUID = 8aaaf200-...)
+REE -> SUPP : rpc_load() → OPTEE_RPC_CMD_LOAD_TA
+SUPP -> SUPP : 讀取 /lib/optee_armtz/<UUID>.ta（全密文）
+SUPP --> REE : 透過共享記憶體回傳 raw TA blob
+
+group 1. ree_fs_ta_open()（驗簽與初始化解密）
+  REE -> REE : shdr_alloc_and_copy() 複製標頭進安全記憶體\nshdr_verify_signature() 用內嵌公鑰驗 RSA-PSS 簽章
+  REE -> REE : crypto_hash_update(shdr || bs_hdr || ehdr)\n檢查 bs_hdr->uuid == 請求 UUID
+  REE -> ENC : tee_ta_decrypt_init(&enc_ctx, ehdr, img_size)
+  ENC -> HUK : tee_otp_get_ta_enc_key(DEV_SPECIFIC)
+  HUK -> HUK : huk_subkey_derive(HUK_SUBKEY_TA_ENC=4,\n  ta_pub_key_modulus) → HMAC-SHA256
+  HUK --> ENC : 256-bit TA_ENC_KEY
+  ENC -> ENC : crypto_authenc_init(AES-GCM, key, iv, tag_len)\nmemzero_explicit(key) 立刻清零堆疊金鑰
+  ENC --> REE : TEE_SUCCESS
+end
+
+group 2. ree_fs_ta_read()（邊讀、邊解密、邊算明文 Hash）
+  loop ldelf 逐頁讀取 ELF（每塊 1KB bounce buffer）
+    LDELF -> REE : sys_open_ta_bin / read
+    REE -> ENC : tee_ta_decrypt_update(enc_ctx, dst, src, n)
+    ENC --> REE : 產出明文區段於 Secure RAM
+    REE -> REE : crypto_hash_update(hash_ctx, dst, n)\ncopy_to_user(ldelf_buf, dst, n)
+  end
+end
+
+group 3. 結尾雙重驗證（GCM Tag + RSA-Signed SHA-256）
+  REE -> ENC : tee_ta_decrypt_final(enc_ctx, ehdr->tag)
+  alt 密文或 Tag 被 Linux root 竄改 1 byte
+    ENC --> REE : TEE_ERROR_MAC_INVALID → TEE_ERROR_SECURITY
+    REE --> CA : TEEC_OpenSession 失敗：0xffff000f (TEEC_ERROR_SECURITY)
+  else GCM Tag 驗證通過
+    ENC --> REE : TEE_SUCCESS
+    REE -> REE : check_digest() 比對明文 SHA-256 == shdr->hash\ncheck_update_version() 檢查 ta_version 防降級
+    REE --> LDELF : 解密驗證完成，啟動加密後的 User TA
+    LDELF --> CA : TA incremented value to 43
+  end
+end
+
+@enduml

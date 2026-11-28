@@ -1,0 +1,52 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName "Noto Sans CJK TC"
+skinparam dpi 150
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+skinparam ArrowColor #1E293B
+skinparam ArrowFontColor #0F172A
+skinparam ArrowFontSize 11
+
+title TF-A v2.10.4 韌體加密架構：編譯期加密打包 與 BL2 開機期 IO 分層解密
+
+package "編譯期（Host / Yocto Build）" #EFF6FF {
+  rectangle "明文映像\nbl31.bin / tee-*.bin" as PLAIN #FFFFFF
+  rectangle "cert_create\n對「明文」算 SHA-256\n簽發 soc/tos-fw-cert" as CERT #DBEAFE
+  rectangle "encrypt_fw (OpenSSL EVP)\nAES-256-GCM 加密 + 附加\n44-byte struct fw_enc_hdr" as ENCTOOL #BFDBFE
+  rectangle "fiptool create\n封裝進 fip.bin → flash.bin" as FIP #93C5FD
+}
+
+package "struct fw_enc_hdr（44 bytes，置於每個密文映像開頭）" #FEFCE8 {
+  rectangle "offset 0x00 (4B): magic = 0xAA640001\noffset 0x04 (2B): dec_algo = 0 (AES-GCM)\noffset 0x06 (2B): flags (bit0: 0=SSK / 1=BSSK)\noffset 0x08 (2B): iv_len = 12  |  0x0A (2B): tag_len = 16\noffset 0x0C (16B): iv[16]（前 12B 為 Nonce）\noffset 0x1C (16B): tag[16]（GCM 認證標籤）\noffset 0x2C ...  : AES-256-GCM 密文 Payload" as HDR #FEF08A
+}
+
+package "開機期（BL2 / Secure EL1 IO 分層架構）" #ECFDF5 {
+  rectangle "common/bl_common.c\nload_auth_image_recursive()\n1) 驗憑證  2) load_image()  3) auth_mod_verify_img()" as BLC #DCFCE7
+  rectangle "drivers/io/io_encrypted.c (enc_dev_handle)\n讀 44B Header → 取金鑰 → 原地 AES-256-GCM 解密\n解密後立即 memset(key, 0)" as IOENC #BBF7D0
+  rectangle "drivers/io/io_fip.c (fip_dev_handle)\n依 UUID 查 FIP ToC 偏移與長度" as IOFIP #86EFAC
+  rectangle "drivers/io/io_memmap.c (memmap_dev_handle)\n從 Secure Flash 0x40000 讀取位元組" as IOMEM #4ADE80
+  rectangle "金鑰與密碼層\nplat_get_enc_key_info()（SSK/BSSK）\n+ mbedtls_gcm_decrypt()（常數時間 Tag 比對）" as CRYPTO #FDE68A
+}
+
+PLAIN --> CERT : "明文雜湊"
+PLAIN --> ENCTOOL : "明文加密"
+CERT --> FIP : "X.509 憑證"
+ENCTOOL --> FIP : "44B Header + 密文"
+ENCTOOL ..> HDR : "格式定義"
+
+FIP ==> IOMEM : "flash.bin 載入"
+BLC --> IOENC : "BL31 / BL32 走 enc_dev_handle"
+IOENC --> IOFIP : "backend_dev_handle"
+IOFIP --> IOMEM : "FIP_IMAGE_ID"
+IOENC --> CRYPTO : "取金鑰 & AEAD 解密"
+
+legend bottom
+  <b>關鍵設計（先驗 Tag 解密、再驗明文 TBBR Hash）</b>
+  • 外部 Flash 中的 BL31 / BL32 全為高熵密文（~7.997 bits/byte），strings / objdump 完全失效
+  • BL2 透過 plat_io_policy 將加密映像透明導向 enc_dev_handle，外層 TBBR 驗簽程式碼不需改動
+  • 竄改密文或 Tag 會先在 io_encrypted 觸發 AES-GCM 失敗 (-2 / -ENOENT)，甚至還沒進入 TBBR 雜湊比對
+endlegend
+
+@enduml

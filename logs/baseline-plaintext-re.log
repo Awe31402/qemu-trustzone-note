@@ -1,0 +1,86 @@
+=== [Baseline] Plaintext Firmware & TA Reverse Engineering Evidence ===
+Date: 2026-11-28T09:26:09+08:00
+
+--- 1. FIP Table of Contents (Baseline TBBR only, NO Encryption) ---
+Trusted Boot Firmware BL2: offset=0x268, size=0x125D1, cmdline="--tb-fw"
+EL3 Runtime Firmware BL31: offset=0x12839, size=0xD06C, cmdline="--soc-fw"
+Secure Payload BL32 (Trusted OS): offset=0x1F8A5, size=0x1C, cmdline="--tos-fw"
+Secure Payload BL32 Extra1 (Trusted OS Extra1): offset=0x1F8C1, size=0xB0348, cmdline="--tos-fw-extra1"
+Non-Trusted Firmware BL33: offset=0xCFC09, size=0xFFDD8, cmdline="--nt-fw"
+Trusted key certificate: offset=0x1CF9E1, size=0x616, cmdline="--trusted-key-cert"
+SoC Firmware key certificate: offset=0x1CFFF7, size=0x4E2, cmdline="--soc-fw-key-cert"
+Trusted OS Firmware key certificate: offset=0x1D04D9, size=0x4F0, cmdline="--tos-fw-key-cert"
+Non-Trusted Firmware key certificate: offset=0x1D09C9, size=0x4F2, cmdline="--nt-fw-key-cert"
+Trusted Boot Firmware BL2 certificate: offset=0x1D0EBB, size=0x4BE, cmdline="--tb-fw-cert"
+SoC Firmware content certificate: offset=0x1D1379, size=0x438, cmdline="--soc-fw-cert"
+Trusted OS Firmware content certificate: offset=0x1D17B1, size=0x4D6, cmdline="--tos-fw-cert"
+Non-Trusted Firmware content certificate: offset=0x1D1C87, size=0x448, cmdline="--nt-fw-cert"
+
+--- 2. Shannon Entropy of Unpacked FIP Images (Plaintext) ---
+tb-fw.bin            size=   75217  entropy=5.7784 bits/byte  first16=f40300aaf50301aaf60302aaf70303aa
+soc-fw.bin           size=   53356  entropy=4.4351 bits/byte  first16=f40300aaf50301aaf60302aaf70303aa
+tos-fw.bin           size=      28  entropy=2.4502 bits/byte  first16=4f505445020100000100000000000000
+tos-fw-extra1.bin    size=  721736  entropy=7.1075 bits/byte  first16=f30300aaf40301aaf50302aaf60303aa
+nt-fw.bin            size= 1048024  entropy=5.9480 bits/byte  first16=0a0000141f2003d50000000000000000
+
+--- 3. BL31 (soc-fw.bin) Plaintext Strings (sample) ---
+(BL31: Preparing for EL3 exit to %s world
+BL31: %s
+(BL31: Initializing runtime services
+(BL31: Initializing BL32
+BL31: BL32 initialization failed
+(PSCI Power Domain Map:
+Unimplemented PSCI Call: 0x%x
+
+--- 4. BL31 (soc-fw.bin) Plaintext ARM64 Disassembly (first 12 insns) ---
+       0:	aa0003f4 	mov	x20, x0
+       4:	aa0103f5 	mov	x21, x1
+       8:	aa0203f6 	mov	x22, x2
+       c:	aa0303f7 	mov	x23, x3
+      10:	10033f80 	adr	x0, 0x6800
+      14:	d51ec000 	msr	vbar_el3, x0
+      18:	d5033fdf 	isb
+      1c:	9400065d 	bl	0x1990
+      20:	d2820141 	mov	x1, #0x100a                	// #4106
+      24:	d53e1000 	mrs	x0, sctlr_el3
+      28:	aa010000 	orr	x0, x0, x1
+      2c:	d51e1000 	msr	sctlr_el3, x0
+      30:	d5033fdf 	isb
+
+--- 5. BL32 OP-TEE Pager (tos-fw-extra1.bin) Plaintext Strings (sample) ---
+/usr/src/debug/optee-os/4.1.0/ldelf/main.c
+/usr/src/debug/optee-os/4.1.0/ldelf/ta_elf.c
+/usr/src/debug/optee-os/4.1.0/ldelf/ta_elf_rel.c
+/usr/src/debug/optee-os/4.1.0/lib/libutils/isoc/bget_malloc.c
+/usr/src/debug/optee-os/4.1.0/lib/libutils/isoc/bget.c
+Embedded device tree for OP-TEE/Qemu platform test purpose
+/usr/src/debug/optee-os/4.1.0/core/arch/arm/kernel/thread.c
+/usr/src/debug/optee-os/4.1.0/core/include/kernel/misc.h
+/usr/src/debug/optee-os/4.1.0/core/include/kernel/spinlock.h
+/usr/src/debug/optee-os/4.1.0/core/include/kernel/user_ta.h
+/usr/src/debug/optee-os/4.1.0/core/arch/arm/kernel/thread_optee_smc.c
+/usr/src/debug/optee-os/4.1.0/core/arch/arm/kernel/abort.c
+/usr/src/debug/optee-os/4.1.0/core/arch/arm/include/kernel/stmm_sp.h
+/usr/src/debug/optee-os/4.1.0/core/arch/arm/kernel/vfp.c
+/usr/src/debug/optee-os/4.1.0/core/arch/arm/kernel/boot.c
+
+--- 6. Plaintext OP-TEE User TA (pkcs11: fd02c9da-306c-48c7-a49c-bbd827ae86ee.ta) ---
+-rw-r--r-- 4 awe awe 415K Nov 26 13:21 /home/awe/disk/qemu-trustzone/build/tmp/work/qemuarm64_secureboot-poky-linux/optee-os/4.1.0/image/lib/optee_armtz/fd02c9da-306c-48c7-a49c-bbd827ae86ee.ta
+SHDR magic=0x4f545348 img_type=1 (0=SHDR_TA, 1=SHDR_BOOTSTRAP_TA, 2=SHDR_ENCRYPTED_TA) img_size=423840 algo=0x70414930
+File size=424168 entropy=6.1400 bits/byte  ELF magic (7f 45 4c 46) found at offset=0x148
+Strings inside plaintext .ta (sample):
+OP-TEE PKCS11 TA
+/usr/src/debug/optee-os/4.1.0/ta/pkcs11/src/attributes.c
+rc == PKCS11_CKR_OK
+/usr/src/debug/optee-os/4.1.0/ta/pkcs11/src/object.c
+/usr/src/debug/optee-os/4.1.0/ta/pkcs11/src/persistent_token.c
+token->db_main->flags & PKCS11_CKFT_PROTECTED_AUTHENTICATION_PATH
+Failed to parse CKA_VALUE
+/usr/src/debug/optee-os/4.1.0/ta/pkcs11/src/pkcs11_attributes.c
+function == PKCS11_FUNCTION_DIGEST
+get_class(temp) == PKCS11_CKO_DATA
+get_class(*out) == PKCS11_CKO_DATA
+get_class(temp) == PKCS11_CKO_CERTIFICATE
+get_class(*out) == PKCS11_CKO_CERTIFICATE
+get_class(*temp) == PKCS11_CKO_SECRET_KEY
+get_class(temp) == PKCS11_CKO_SECRET_KEY

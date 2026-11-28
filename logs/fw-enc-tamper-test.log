@@ -1,0 +1,89 @@
+=== [Track 1] TF-A Firmware Encryption Tamper Tests ===
+
+=== Test A: Flip 1 byte in BL31 AES-GCM ciphertext (+0x100 inside BL31) (flash.bin @ 0x54939: 0x1f -> 0xe0) ===
+NOTICE:  Booting Trusted Firmware
+NOTICE:  BL1: v2.10.4(release):lts-v2.10.4-dirty
+NOTICE:  BL1: Built : 16:23:33, Apr 26 2024
+INFO:    BL1: RAM 0xe0ee000 - 0xe0fa000
+INFO:    Using crypto library 'mbed TLS'
+INFO:    BL1: Loading BL2
+INFO:    Loading image id=6 at address 0xe06b000
+INFO:    Image id=6 loaded: 0xe06b000 - 0xe06b4be
+INFO:    Loading image id=1 at address 0xe06b000
+INFO:    Image id=1 loaded: 0xe06b000 - 0xe07f5d1
+NOTICE:  BL1: Booting BL2
+INFO:    Entry point address = 0xe06b000
+INFO:    SPSR = 0x3c5
+NOTICE:  BL2: v2.10.4(release):lts-v2.10.4-dirty
+NOTICE:  BL2: Built : 16:23:33, Apr 26 2024
+INFO:    Using crypto library 'mbed TLS'
+INFO:    BL2: Doing platform setup
+INFO:    BL2: Loading image id 3
+INFO:    Loading image id=7 at address 0xe0a0000
+INFO:    Image id=7 loaded: 0xe0a0000 - 0xe0a0616
+INFO:    Loading image id=9 at address 0xe0a0000
+INFO:    Image id=9 loaded: 0xe0a0000 - 0xe0a04e2
+INFO:    Loading image id=13 at address 0xe0a0000
+INFO:    Image id=13 loaded: 0xe0a0000 - 0xe0a0438
+INFO:    Loading image id=3 at address 0xe0a0000
+ERROR:   File decryption failed (4)
+WARNING: Failed to load image id=3 (-2)
+ERROR:   BL2: Failed to load image id 3
+=== Test B: Flip 1 byte in BL31 fw_enc_hdr.magic (+0x00 inside BL31) (flash.bin @ 0x54839: 0x01 -> 0xfe) ===
+NOTICE:  Booting Trusted Firmware
+NOTICE:  BL1: v2.10.4(release):lts-v2.10.4-dirty
+NOTICE:  BL1: Built : 16:23:33, Apr 26 2024
+INFO:    BL1: RAM 0xe0ee000 - 0xe0fa000
+INFO:    Using crypto library 'mbed TLS'
+INFO:    BL1: Loading BL2
+INFO:    Loading image id=6 at address 0xe06b000
+INFO:    Image id=6 loaded: 0xe06b000 - 0xe06b4be
+INFO:    Loading image id=1 at address 0xe06b000
+INFO:    Image id=1 loaded: 0xe06b000 - 0xe07f5d1
+NOTICE:  BL1: Booting BL2
+INFO:    Entry point address = 0xe06b000
+INFO:    SPSR = 0x3c5
+NOTICE:  BL2: v2.10.4(release):lts-v2.10.4-dirty
+NOTICE:  BL2: Built : 16:23:33, Apr 26 2024
+INFO:    Using crypto library 'mbed TLS'
+INFO:    BL2: Doing platform setup
+INFO:    BL2: Loading image id 3
+INFO:    Loading image id=7 at address 0xe0a0000
+INFO:    Image id=7 loaded: 0xe0a0000 - 0xe0a0616
+INFO:    Loading image id=9 at address 0xe0a0000
+INFO:    Image id=9 loaded: 0xe0a0000 - 0xe0a04e2
+INFO:    Loading image id=13 at address 0xe0a0000
+INFO:    Image id=13 loaded: 0xe0a0000 - 0xe0a0438
+INFO:    Loading image id=3 at address 0xe0a0000
+WARNING: Encryption header check failed.
+WARNING: Failed to load image id=3 (-2)
+ERROR:   BL2: Failed to load image id 3
+=== Test C: Flip 1 byte in BL31 AES-GCM Auth Tag (+0x20 inside BL31) (flash.bin @ 0x54859: 0xf4 -> 0x0b) ===
+NOTICE:  Booting Trusted Firmware
+NOTICE:  BL1: v2.10.4(release):lts-v2.10.4-dirty
+NOTICE:  BL1: Built : 16:23:33, Apr 26 2024
+INFO:    BL1: RAM 0xe0ee000 - 0xe0fa000
+INFO:    Using crypto library 'mbed TLS'
+INFO:    BL1: Loading BL2
+INFO:    Loading image id=6 at address 0xe06b000
+INFO:    Image id=6 loaded: 0xe06b000 - 0xe06b4be
+INFO:    Loading image id=1 at address 0xe06b000
+INFO:    Image id=1 loaded: 0xe06b000 - 0xe07f5d1
+NOTICE:  BL1: Booting BL2
+INFO:    Entry point address = 0xe06b000
+INFO:    SPSR = 0x3c5
+NOTICE:  BL2: v2.10.4(release):lts-v2.10.4-dirty
+NOTICE:  BL2: Built : 16:23:33, Apr 26 2024
+INFO:    Using crypto library 'mbed TLS'
+INFO:    BL2: Doing platform setup
+INFO:    BL2: Loading image id 3
+INFO:    Loading image id=7 at address 0xe0a0000
+INFO:    Image id=7 loaded: 0xe0a0000 - 0xe0a0616
+INFO:    Loading image id=9 at address 0xe0a0000
+INFO:    Image id=9 loaded: 0xe0a0000 - 0xe0a04e2
+INFO:    Loading image id=13 at address 0xe0a0000
+INFO:    Image id=13 loaded: 0xe0a0000 - 0xe0a0438
+INFO:    Loading image id=3 at address 0xe0a0000
+ERROR:   File decryption failed (4)
+WARNING: Failed to load image id=3 (-2)
+ERROR:   BL2: Failed to load image id 3

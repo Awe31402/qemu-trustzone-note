@@ -35,16 +35,16 @@
 
 ---
 
-## 4. 下一步深入研究路線（本 QEMU 環境可實作的防逆向實驗）
+## 4. 本 QEMU 環境防逆向工程四部曲（均已完成實作、追碼與實機驗證）
 
-我們目前的 QEMU 環境已經開啟了 **防線 3（TF-A TBBR 驗簽 + OP-TEE TA 簽章驗證）**。經確認本地 **TF-A v2.10.4** 與 **OP-TEE 4.1.0** 原始碼，下列四個主題都可以直接在本環境繼續往下挖、動手驗證：
+我們已在本機 **TF-A v2.10.4 + OP-TEE 4.1.0 + U-Boot 2024.01 + Linux 6.6.160** 環境完成全部四條防逆向實戰路線，並先記錄明文基線逆向證據（[baseline-plaintext-re.log](logs/baseline-plaintext-re.log)）作為前後對照：
 
-| 優先順序 | 實驗／研究主題 | 驗證目標（與防逆向的關係） | 本地原始碼入口（已確認存在） |
+| 路線 | 實驗／研究主題 | 狀態與核心實測結論 | 對應 `kas` Overlay 與專題筆記 |
 | :---: | :--- | :--- | :--- |
-| **1** | **啟用 TF-A 韌體加密（Firmware Encryption）** | 將 `BL31`、`BL32`（OP-TEE）用 **AES-GCM** 加密塞進 `fip.bin`；開機後用 `strings` / `objdump` 驗證 Flash 裡只剩密文，且 BL2 能在開機期自動解密執行。 | `plat/qemu/qemu/platform.mk:129`（`DECRYPTION_SUPPORT=aes_gcm`、`ENCRYPT_BL31=1`、`ENCRYPT_BL32=1`）、`plat/qemu/common/qemu_io_storage.c:231,244` |
-| **2** | **啟用 OP-TEE TA 加密（`CFG_ENCRYPT_TA`）** | 將 `/lib/optee_armtz/*.ta` 加密成密文，體驗「即使 Linux 拿到 `root` 權限直接讀 `.ta` 檔，也無法反組譯商業機密演算法」；並追蹤 OP-TEE 如何透過 `HUK → HUK_SUBKEY_TA_ENC` 衍生解密金鑰。 | `optee-os/core/kernel/huk_subkey.c:61`、`optee-os/core/kernel/otp_stubs.c:49`（`HUK_SUBKEY_TA_ENC`） |
-| **3** | **模擬防降級攻擊（Anti-Rollback / NV Counter）** | 觀察 TBBR 憑證裡的 `nv_ctr` 欄位，修改 `plat_get_nv_ctr()` 模擬硬體 OTP 計數器升級，實測刷回舊版 `fip.bin` 被 BL1/BL2 攔截的完整過程。 | `plat/qemu/common/qemu_trusted_boot.c:21`（`plat_get_nv_ctr`）、`drivers/auth/auth_mod.c:379` |
-| **4** | **延伸信任鏈到 Linux（U-Boot Signed FIT + `dm-verity`）與 OP-TEE 安全儲存** | 把信任鏈從 U-Boot（BL33）一路接到 Linux Kernel 與唯讀 RootFS，並實驗 OP-TEE **Secure Storage** 如何利用 HUK 加密機敏設定檔（防拆機複製）。 | `kas/` 新增 `uboot-fit.yml`、`optee_examples/secure_storage` |
+| **1** | **TF-A 韌體加密（Firmware Encryption）** | ✅ 已完成：`BL31` / `OP-TEE` 熵值由 `4.435` / `7.108` 升至 **`~7.997` bits/byte**，`strings` 歸零、`objdump` 全為亂碼；竄改密文／標頭／Tag 均在 `io_encrypted` 觸發 `-2 (-ENOENT)` 停機。 | `kas/fw-enc.yml` → [tfa-firmware-encryption.md](tfa-firmware-encryption.md) |
+| **2** | **OP-TEE TA 加密（`CFG_ENCRYPT_TA`）** | ✅ 已完成：`/lib/optee_armtz/*.ta` 轉為 `SHDR_ENCRYPTED_TA`（熵值 `~7.999`，ELF 魔術數消失）；驗證 `HUK → HUK_SUBKEY_TA_ENC` 數學衍生；Linux `root` 竄改密文 1 byte 立即回傳 **`0xffff000f` (`TEE_ERROR_SECURITY`)**。 | `kas/ta-enc.yml` → [optee-encrypted-ta.md](optee-encrypted-ta.md) |
+| **3** | **防降級機制（Anti-Rollback / NV Counter）** | ✅ 已完成：透過本地層 `layers/meta-anti-re` 模擬雙軌 OTP (`TFW=2, NTFW=2`)，實測合法舊版 `fip_v0` 被 BL1 攔截、單獨降級 BL33 被 BL2 攔截 (`-80`)、新版 `v3` 驗簽後自動單調燒錄 `2 -> 3`。 | `kas/anti-rollback.yml` → [tfa-anti-rollback-nvctr.md](tfa-anti-rollback-nvctr.md) |
+| **4** | **延伸信任鏈（U-Boot Signed FIT + `dm-verity`）與 OP-TEE Secure Storage** | ✅ 已完成：將 RSA-2048 FIT 公鑰編入受 BL2 保護的 `u-boot.bin`（`.dtb.init.rodata`），實測拒載未簽章與 1-byte 竄改 Kernel FIT、合法驗簽啟動 Linux 6.6.160；並實測 `/var/lib/tee/` 加密雜湊樹竄改回傳 **`0xf0100001` (`TEE_ERROR_CORRUPT_OBJECT`)**。 | `kas/uboot-fit.yml` → [uboot-fit-and-secure-storage.md](uboot-fit-and-secure-storage.md) |
 
 > **補充（真實 SoC 延伸課題）**：若之後轉到實體開發板（如 STM32MP、NXP i.MX8/9、MediaTek Genio），可進一步對照各家硬體手冊研究 **eFuse/OTP 燒錄流程**、**JTAG Authenticated Debug（Debug Token 驗簽解鎖）** 與 **TZC-400 安全區段暫存器設定**。
 
